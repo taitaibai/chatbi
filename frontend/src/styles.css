@@ -1,0 +1,238 @@
+:root {
+  font-family: "IBM Plex Sans", "PingFang SC", "Noto Sans SC", sans-serif;
+  color: #0f172a;
+  background:
+    radial-gradient(circle at top left, rgba(242, 201, 76, 0.22), transparent 24%),
+    radial-gradient(circle at top right, rgba(42, 157, 143, 0.18), transparent 30%),
+    linear-gradient(180deg, #f7f4ec 0%, #efe7d7 100%);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-width: 320px;
+  min-height: 100vh;
+}
+
+button,
+textarea {
+  font: inherit;
+}
+
+#root {
+  min-height: 100vh;
+}
+
+.chat-shell {
+  min-height: 100vh;
+  padding: 32px 20px;
+}
+
+.chat-panel {
+  max-width: 1280px;
+  margin: 0 auto;
+  background: rgba(255, 252, 245, 0.88);
+  border: 1px solid rgba(15, 23, 42, 0.08);
+  border-radius: 28px;
+  box-shadow: 0 20px 60px rgba(110, 88, 43, 0.12);
+  padding: 28px;
+  backdrop-filter: blur(10px);
+}
+
+.chat-hero {
+  display: flex;
+  justify-content: space-between;
+  gap: 24px;
+  align-items: end;
+  margin-bottom: 24px;
+}
+
+.chat-kicker {
+  margin: 0 0 8px;
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  font-size: 12px;
+  color: #b76e2b;
+}
+
+.chat-hero h1 {
+  margin: 0;
+  font-size: clamp(36px, 6vw, 64px);
+  line-height: 0.95;
+}
+
+.chat-description {
+  margin: 0;
+  max-width: 420px;
+  color: #475569;
+  line-height: 1.7;
+}
+
+.chat-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1.8fr) minmax(280px, 0.9fr);
+  gap: 20px;
+}
+
+.chat-messages,
+.chat-sidebar {
+  min-height: 540px;
+}
+
+.chat-messages {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 20px;
+  background: rgba(255, 255, 255, 0.58);
+  border-radius: 24px;
+  border: 1px solid rgba(15, 23, 42, 0.06);
+}
+
+.message-bubble {
+  border-radius: 20px;
+  padding: 18px;
+  max-width: 88%;
+}
+
+.message-bubble-assistant {
+  align-self: flex-start;
+  background: #fffaf0;
+  border: 1px solid rgba(183, 110, 43, 0.14);
+}
+
+.message-bubble-user {
+  align-self: flex-end;
+  background: #123c37;
+  color: #f8fafc;
+}
+
+.message-meta {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 10px;
+  font-size: 12px;
+  opacity: 0.7;
+}
+
+.message-body {
+  display: grid;
+  gap: 12px;
+}
+
+.message-card,
+.sidebar-card {
+  border-radius: 18px;
+  padding: 16px;
+  background: rgba(255, 255, 255, 0.85);
+  border: 1px solid rgba(15, 23, 42, 0.08);
+}
+
+.message-card-title,
+.sidebar-title {
+  margin-bottom: 8px;
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: #0f766e;
+}
+
+.message-code {
+  margin: 0;
+  padding: 14px;
+  border-radius: 14px;
+  background: #102a27;
+  color: #f1f5f9;
+  overflow-x: auto;
+}
+
+.message-table-wrap {
+  overflow-x: auto;
+}
+
+.message-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.message-table th,
+.message-table td {
+  padding: 10px 12px;
+  text-align: left;
+  border-bottom: 1px solid rgba(15, 23, 42, 0.08);
+}
+
+.message-loading {
+  color: #64748b;
+}
+
+.chat-sidebar {
+  display: grid;
+  gap: 16px;
+}
+
+.chat-sidebar ul {
+  margin: 0;
+  padding-left: 18px;
+  color: #334155;
+  line-height: 1.9;
+}
+
+.sidebar-card-accent {
+  background: linear-gradient(135deg, #123c37 0%, #1f665d 100%);
+  color: #f8fafc;
+}
+
+.sidebar-card-accent .sidebar-title {
+  color: #fde68a;
+}
+
+.chat-input {
+  display: flex;
+  gap: 16px;
+  align-items: end;
+  margin-top: 20px;
+}
+
+.chat-input textarea {
+  width: 100%;
+  resize: vertical;
+  min-height: 84px;
+  padding: 16px;
+  border-radius: 20px;
+  border: 1px solid rgba(15, 23, 42, 0.12);
+  background: rgba(255, 255, 255, 0.9);
+}
+
+.chat-input button {
+  border: none;
+  border-radius: 999px;
+  padding: 14px 24px;
+  background: #b76e2b;
+  color: white;
+  cursor: pointer;
+}
+
+@media (max-width: 960px) {
+  .chat-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .chat-hero {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .message-bubble {
+    max-width: 100%;
+  }
+
+  .chat-input {
+    flex-direction: column;
+    align-items: stretch;
+  }
+}

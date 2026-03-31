@@ -1,0 +1,339 @@
+version: "1.0"
+domains:
+  - id: sales
+    name: 销售域
+    description: 交易规模、渠道贡献、退款风险和付费用户分析
+    tables:
+      - id: fact_orders
+        name: dw.fact_orders
+        description: 订单事实表
+        time_field: order_date
+        dimensions:
+          - id: channel
+            name: 渠道
+            aliases: ["渠道", "下单渠道"]
+            field: channel
+          - id: city
+            name: 城市
+            aliases: ["城市"]
+            field: city
+          - id: province
+            name: 省份
+            aliases: ["省份"]
+            field: province
+          - id: category_name
+            name: 品类
+            aliases: ["品类", "商品品类"]
+            field: category_name
+          - id: payment_method
+            name: 支付方式
+            aliases: ["支付方式"]
+            field: payment_method
+      - id: fact_refunds
+        name: dw.fact_refunds
+        description: 退款事实表
+        time_field: refund_date
+        dimensions: []
+    metrics:
+      - id: gmv
+        domain: sales
+        name: GMV
+        aliases: ["GMV", "成交额", "交易额", "交易金额", "销售额", "实付金额"]
+        expression: SUM(amount)
+        base_table: fact_orders
+        filters: ["status = 'paid'"]
+        format: currency
+        description: 实付成交总额
+      - id: order_count
+        domain: sales
+        name: 订单量
+        aliases: ["订单量", "订单数", "单量", "成交笔数"]
+        expression: COUNT(DISTINCT order_id)
+        base_table: fact_orders
+        filters: ["status = 'paid'"]
+        format: number
+        description: 已支付订单数
+      - id: avg_order_value
+        domain: sales
+        name: 客单价
+        aliases: ["客单价", "平均客单价", "AOV", "人均消费"]
+        expression: SUM(amount) / NULLIF(COUNT(DISTINCT order_id), 0)
+        base_table: fact_orders
+        filters: ["status = 'paid'"]
+        format: currency
+        description: 平均订单实付金额
+      - id: refund_amount
+        domain: sales
+        name: 退款金额
+        aliases: ["退款金额", "退款额"]
+        expression: SUM(refund_amount)
+        base_table: fact_refunds
+        filters: []
+        format: currency
+        description: 已退款金额
+      - id: refund_rate
+        domain: sales
+        name: 退款率
+        aliases: ["退款率", "退货率", "退款比例"]
+        expression: COUNT(DISTINCT refund_id) / NULLIF(COUNT(DISTINCT order_id), 0)
+        base_table: fact_orders
+        filters: ["LEFT JOIN fact_refunds ON fact_orders.order_id = fact_refunds.order_id"]
+        format: percent
+        description: 退款订单占比
+      - id: paid_users
+        domain: sales
+        name: 付费用户数
+        aliases: ["付费用户数", "买家数", "成交用户数"]
+        expression: COUNT(DISTINCT user_id)
+        base_table: fact_orders
+        filters: ["status = 'paid'"]
+        format: number
+        description: 完成支付的独立用户数
+
+  - id: user
+    name: 用户域
+    description: 用户增长、留存与活跃健康度分析
+    tables:
+      - id: fact_user_daily
+        name: dw.fact_user_daily
+        description: 用户日活汇总表
+        time_field: stat_date
+        dimensions:
+          - id: channel
+            name: 渠道
+            aliases: ["渠道"]
+            field: channel
+          - id: city
+            name: 城市
+            aliases: ["城市"]
+            field: city
+          - id: user_level
+            name: 用户等级
+            aliases: ["用户等级", "会员等级"]
+            field: user_level
+      - id: dim_users
+        name: dw.dim_users
+        description: 用户维表
+        time_field: register_date
+        dimensions:
+          - id: register_channel
+            name: 注册渠道
+            aliases: ["注册渠道"]
+            field: register_channel
+    metrics:
+      - id: dau
+        domain: user
+        name: DAU
+        aliases: ["DAU", "日活", "日活用户数"]
+        expression: SUM(dau)
+        base_table: fact_user_daily
+        filters: []
+        format: number
+        description: 日活跃用户数
+      - id: new_users
+        domain: user
+        name: 新增用户数
+        aliases: ["新增用户数", "新用户", "拉新", "新注册用户"]
+        expression: SUM(new_users)
+        base_table: fact_user_daily
+        filters: []
+        format: number
+        description: 当日新增注册用户
+      - id: retention_7d
+        domain: user
+        name: 7日留存率
+        aliases: ["7日留存率", "7天留存", "次周留存率"]
+        expression: SUM(retained_users_7d) / NULLIF(SUM(new_users), 0)
+        base_table: fact_user_daily
+        filters: []
+        format: percent
+        description: 7 日留存率
+      - id: retention_30d
+        domain: user
+        name: 30日留存率
+        aliases: ["30日留存率", "30天留存", "月留存率"]
+        expression: SUM(retained_users_30d) / NULLIF(SUM(new_users), 0)
+        base_table: fact_user_daily
+        filters: []
+        format: percent
+        description: 30 日留存率
+      - id: avg_duration
+        domain: user
+        name: 人均使用时长
+        aliases: ["人均使用时长", "平均时长", "人均时长"]
+        expression: SUM(total_duration_sec) / NULLIF(SUM(dau), 0) / 60
+        base_table: fact_user_daily
+        filters: []
+        format: duration
+        description: 每活跃用户平均时长（分钟）
+      - id: registered_users
+        domain: user
+        name: 累计注册用户数
+        aliases: ["累计注册用户数", "总用户数", "注册用户数"]
+        expression: COUNT(DISTINCT user_id)
+        base_table: dim_users
+        filters: []
+        format: number
+        description: 累计注册用户规模
+
+  - id: product
+    name: 商品域
+    description: 爆款、库存和动销率分析
+    tables:
+      - id: fact_product_sales
+        name: dw.fact_product_sales
+        description: 商品销售日汇总表
+        time_field: stat_date
+        dimensions:
+          - id: product_name
+            name: 商品
+            aliases: ["商品", "商品名称"]
+            field: product_name
+          - id: category_name
+            name: 品类
+            aliases: ["品类", "商品品类"]
+            field: category_name
+          - id: brand
+            name: 品牌
+            aliases: ["品牌"]
+            field: brand
+          - id: channel
+            name: 渠道
+            aliases: ["渠道"]
+            field: channel
+      - id: dim_products
+        name: dw.dim_products
+        description: 商品维表
+        dimensions: []
+    metrics:
+      - id: sales_volume
+        domain: product
+        name: 商品销量
+        aliases: ["商品销量", "销量", "销售件数", "出货量"]
+        expression: SUM(sales_volume)
+        base_table: fact_product_sales
+        filters: []
+        format: number
+        description: 销售件数
+      - id: sales_amount
+        domain: product
+        name: 商品销售额
+        aliases: ["商品销售额", "品类销售额", "商品GMV"]
+        expression: SUM(sales_amount)
+        base_table: fact_product_sales
+        filters: []
+        format: currency
+        description: 商品销售金额
+      - id: stock_quantity
+        domain: product
+        name: 库存量
+        aliases: ["库存量", "库存", "剩余库存"]
+        expression: SUM(stock_quantity)
+        base_table: fact_product_sales
+        filters: []
+        format: number
+        description: 当前库存量
+      - id: sell_through_rate
+        domain: product
+        name: 动销率
+        aliases: ["动销率", "动销比例"]
+        expression: COUNT(DISTINCT CASE WHEN sales_volume > 0 THEN product_id END) / NULLIF(COUNT(DISTINCT product_id), 0)
+        base_table: fact_product_sales
+        filters: []
+        format: percent
+        description: 动销商品占比
+      - id: product_conversion_rate
+        domain: product
+        name: 商品转化率
+        aliases: ["商品转化率", "商品点击转化"]
+        expression: SUM(sales_volume) / NULLIF(SUM(view_count), 0)
+        base_table: fact_product_sales
+        filters: []
+        format: percent
+        description: 浏览到购买的转化率
+
+  - id: traffic
+    name: 流量域
+    description: 流量质量、漏斗和 ROI 分析
+    tables:
+      - id: fact_page_views
+        name: dw.fact_page_views
+        description: 页面访问日汇总表
+        time_field: stat_date
+        dimensions:
+          - id: page
+            name: 页面
+            aliases: ["页面", "页面名称"]
+            field: page
+          - id: channel
+            name: 渠道
+            aliases: ["渠道"]
+            field: channel
+          - id: city
+            name: 城市
+            aliases: ["城市"]
+            field: city
+      - id: fact_channel_traffic
+        name: dw.fact_channel_traffic
+        description: 渠道流量漏斗表
+        time_field: stat_date
+        dimensions:
+          - id: channel
+            name: 渠道
+            aliases: ["渠道"]
+            field: channel
+    metrics:
+      - id: pv
+        domain: traffic
+        name: PV
+        aliases: ["PV", "页面浏览量"]
+        expression: SUM(pv)
+        base_table: fact_page_views
+        filters: []
+        format: number
+        description: 页面浏览量
+      - id: uv
+        domain: traffic
+        name: UV
+        aliases: ["UV", "独立访客数"]
+        expression: SUM(uv)
+        base_table: fact_page_views
+        filters: []
+        format: number
+        description: 独立访客数
+      - id: bounce_rate
+        domain: traffic
+        name: 跳出率
+        aliases: ["跳出率", "Bounce Rate"]
+        expression: SUM(bounce_count) / NULLIF(SUM(uv), 0)
+        base_table: fact_page_views
+        filters: []
+        format: percent
+        description: 跳出会话占比
+      - id: avg_stay_duration
+        domain: traffic
+        name: 人均停留时长
+        aliases: ["人均停留时长", "平均停留时长", "停留时间"]
+        expression: SUM(total_duration_sec) / NULLIF(SUM(uv), 0)
+        base_table: fact_page_views
+        filters: []
+        format: duration
+        description: 人均停留秒数
+      - id: channel_conversion_rate
+        domain: traffic
+        name: 渠道转化率
+        aliases: ["渠道转化率", "支付转化率", "总体转化率"]
+        expression: SUM(pay_uv) / NULLIF(SUM(visit_uv), 0)
+        base_table: fact_channel_traffic
+        filters: []
+        format: percent
+        description: 渠道访问到支付的转化率
+      - id: roi
+        domain: traffic
+        name: ROI
+        aliases: ["ROI", "广告ROI", "投入产出比"]
+        expression: SUM(gmv) / NULLIF(SUM(ad_cost), 0)
+        base_table: fact_channel_traffic
+        filters: []
+        format: number
+        description: 投入产出比
