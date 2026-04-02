@@ -75,9 +75,13 @@ domains:
         domain: sales
         name: 退款率
         aliases: ["退款率", "退货率", "退款比例"]
-        expression: COUNT(DISTINCT refund_id) / NULLIF(COUNT(DISTINCT order_id), 0)
+        expression: COUNT(DISTINCT fact_refunds.refund_id) / NULLIF(COUNT(DISTINCT fact_orders.order_id), 0)
         base_table: fact_orders
-        filters: ["LEFT JOIN fact_refunds ON fact_orders.order_id = fact_refunds.order_id"]
+        joins:
+          - join_type: left
+            table: fact_refunds
+            "on": fact_orders.order_id = fact_refunds.order_id
+        filters: []
         format: percent
         description: 退款订单占比
       - id: paid_users

@@ -3,14 +3,18 @@ from __future__ import annotations
 import time
 
 from adapters.base import DataSourceAdapter
-from models import ComplexityEstimate, QueryResult
+from models import ComplexityEstimate, QueryColumn, QueryResult
 
 
 class MockAdapter(DataSourceAdapter):
     def __init__(self) -> None:
         self._datasets = {
             "sales": {
-                "columns": ["channel", "gmv", "order_count"],
+                "columns": [
+                    QueryColumn(name="channel", type="string"),
+                    QueryColumn(name="gmv", type="number", format="currency"),
+                    QueryColumn(name="order_count", type="number", format="number"),
+                ],
                 "rows": [
                     ["App", 258000.0, 320],
                     ["Web", 187500.0, 245],
@@ -19,7 +23,11 @@ class MockAdapter(DataSourceAdapter):
                 ],
             },
             "user": {
-                "columns": ["stat_date", "dau", "new_users"],
+                "columns": [
+                    QueryColumn(name="stat_date", type="date"),
+                    QueryColumn(name="dau", type="number", format="number"),
+                    QueryColumn(name="new_users", type="number", format="number"),
+                ],
                 "rows": [
                     ["2025-03-24", 10234, 580],
                     ["2025-03-25", 10892, 604],
@@ -28,7 +36,11 @@ class MockAdapter(DataSourceAdapter):
                 ],
             },
             "product": {
-                "columns": ["category_name", "sales_amount", "sales_volume"],
+                "columns": [
+                    QueryColumn(name="category_name", type="string"),
+                    QueryColumn(name="sales_amount", type="number", format="currency"),
+                    QueryColumn(name="sales_volume", type="number", format="number"),
+                ],
                 "rows": [
                     ["3C", 356000.0, 1780],
                     ["服装", 285500.0, 2420],
@@ -36,7 +48,12 @@ class MockAdapter(DataSourceAdapter):
                 ],
             },
             "traffic": {
-                "columns": ["channel", "uv", "pay_uv", "roi"],
+                "columns": [
+                    QueryColumn(name="channel", type="string"),
+                    QueryColumn(name="uv", type="number", format="number"),
+                    QueryColumn(name="pay_uv", type="number", format="number"),
+                    QueryColumn(name="roi", type="number", format="number"),
+                ],
                 "rows": [
                     ["App", 45200, 5220, 4.3],
                     ["Web", 28300, 2710, 3.1],
@@ -44,7 +61,10 @@ class MockAdapter(DataSourceAdapter):
                 ],
             },
             "default": {
-                "columns": ["label", "value"],
+                "columns": [
+                    QueryColumn(name="label", type="string"),
+                    QueryColumn(name="value", type="number", format="number"),
+                ],
                 "rows": [["mock_result", 1]],
             },
         }
@@ -56,7 +76,7 @@ class MockAdapter(DataSourceAdapter):
         return QueryResult(
             columns=dataset["columns"],
             rows=dataset["rows"],
-            row_count=len(dataset["rows"]),
+            total_rows=len(dataset["rows"]),
             execution_ms=execution_ms,
         )
 
@@ -78,7 +98,7 @@ class MockAdapter(DataSourceAdapter):
     async def health_check(self) -> bool:
         return True
 
-    def _select_dataset(self, sql: str) -> dict[str, list]:
+    def _select_dataset(self, sql: str) -> dict[str, list[QueryColumn] | list[list]]:
         return self._datasets[self._infer_domain(sql)]
 
     def _infer_domain(self, sql: str) -> str:

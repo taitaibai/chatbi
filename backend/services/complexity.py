@@ -75,9 +75,15 @@ class ComplexityGuard:
         estimate = await adapter.estimate_complexity(sql)
         estimated_rows = estimate.estimated_rows
 
+        # 解析一次，传递给所有辅助方法复用
+        try:
+            tree: exp.Expression | None = sqlglot.parse_one(sql)
+        except sqlglot.errors.ParseError:
+            tree = None
+
         # 规则 1：预估扫描行数超过阈值 → 拦截
         if estimated_rows > self._threshold:
-            suggestion = self._build_block_suggestion(sql)
+            suggestion = self._build_block_suggestion(tree)
             return CheckResult(
                 allowed=False,
                 level="blocked",
@@ -87,7 +93,7 @@ class ComplexityGuard:
             )
 
         # 规则 2：涉及大表但无时间过滤 → 警告
-        warning = self._check_missing_time_filter(sql)
+        warning = self._check_missing_time_filter(tree)
         if warning:
             return CheckResult(
                 allowed=True,
@@ -104,16 +110,16 @@ class ComplexityGuard:
         )
 
     # ------------------------------------------------------------------
-    # 内部辅助方法
+    # 内部辅助方法（均接受已解析的 tree，避免重复 parse）
     # ------------------------------------------------------------------
 
-    def _build_block_suggestion(self, sql: str) -> str:
+    def _build_block_suggestion(self, tree: exp.Expression | None) -> str:
         suggestions: list[str] = []
 
-        if not self._has_time_filter(sql):
+        if not self._has_time_filter(tree):
             suggestions.append("建议增加 order_date 范围（如 WHERE order_date BETWEEN '...' AND '...'）")
 
-        high_card = self._detect_high_cardinality(sql)
+        high_card = self._detect_high_cardinality(tree)
         if high_card:
             suggestions.append(high_card)
 
@@ -122,11 +128,9 @@ class ComplexityGuard:
 
         return "；".join(suggestions)
 
-    def _check_missing_time_filter(self, sql: str) -> dict[str, str] | None:
+    def _check_missing_time_filter(self, tree: exp.Expression | None) -> dict[str, str] | None:
         """若查询涉及大表且没有时间过滤，返回警告信息字典，否则返回 None。"""
-        try:
-            tree = sqlglot.parse_one(sql)
-        except sqlglot.errors.ParseError:
+        if tree is None:
             return None
 
         tables_in_query = {
@@ -137,7 +141,7 @@ class ComplexityGuard:
         if not (tables_in_query & _LARGE_TABLES):
             return None
 
-        if self._has_time_filter(sql):
+        if self._has_time_filter(tree):
             return None
 
         return {
@@ -145,11 +149,9 @@ class ComplexityGuard:
             "suggestion": "建议增加 order_date 范围（如 WHERE order_date BETWEEN '...' AND '...'）",
         }
 
-    def _has_time_filter(self, sql: str) -> bool:
+    def _has_time_filter(self, tree: exp.Expression | None) -> bool:
         """判断 WHERE 子句是否引用了时间维度字段。"""
-        try:
-            tree = sqlglot.parse_one(sql)
-        except sqlglot.errors.ParseError:
+        if tree is None:
             return False
 
         where = tree.args.get("where")
@@ -161,11 +163,9 @@ class ComplexityGuard:
                 return True
         return False
 
-    def _detect_high_cardinality(self, sql: str) -> str | None:
+    def _detect_high_cardinality(self, tree: exp.Expression | None) -> str | None:
         """检测 GROUP BY 中是否包含高基数维度，返回优化建议（若有）。"""
-        try:
-            tree = sqlglot.parse_one(sql)
-        except sqlglot.errors.ParseError:
+        if tree is None:
             return None
 
         group_by = tree.args.get("group")

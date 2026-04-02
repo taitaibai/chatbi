@@ -1,3 +1,5 @@
+import os
+
 import structlog
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -44,6 +46,7 @@ async def health_check() -> dict:
 
 @app.on_event("startup")
 async def on_startup() -> None:
+    _check_admin_token_safety()
     await audit_logger.initialize()
     logger.info(
         "chatbi_startup",
@@ -51,4 +54,34 @@ async def on_startup() -> None:
         datasource_type=settings.datasource_type,
         log_level=settings.log_level,
         semantic_model_path=settings.semantic_model_path,
+    )
+
+
+@app.on_event("shutdown")
+async def on_shutdown() -> None:
+    await audit_logger.close()
+
+
+_DEFAULT_ADMIN_TOKEN = "change-me-in-production"
+
+
+def _check_admin_token_safety() -> None:
+    """Guard against deploying with the default admin token.
+
+    In production (APP_ENV=production) the application refuses to start.
+    In all other environments a prominent warning is logged.
+    """
+    if settings.admin_token != _DEFAULT_ADMIN_TOKEN:
+        return
+
+    app_env = os.getenv("APP_ENV", "dev").lower()
+    if app_env == "production":
+        raise RuntimeError(
+            "admin_token is still set to the default value. "
+            "Set a strong secret via the ADMIN_TOKEN environment variable before deploying."
+        )
+
+    logger.warning(
+        "admin_token_default_value",
+        message="admin_token is using the default value — change ADMIN_TOKEN before deploying to production",
     )

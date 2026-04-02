@@ -5,11 +5,14 @@ import re
 from pathlib import Path
 from typing import Any
 
+import structlog
 from jinja2 import Environment, FileSystemLoader
 
 from config.loader import get_semantic_model
-from llm.client import LLMClient
+from llm.client import LLMClient, LLMClientError
 from models import FilterCondition, ParsedIntent, SemanticModel, SessionContext, TimeRange
+
+logger = structlog.get_logger(__name__)
 
 _PROMPT_DIR = Path(__file__).resolve().parent.parent / "llm" / "prompts"
 _jinja_env = Environment(loader=FileSystemLoader(str(_PROMPT_DIR)), autoescape=False)
@@ -75,7 +78,14 @@ class NLUService:
                         "content": "你的响应不是合法 JSON，请重新输出，只输出 JSON 对象，不要包含任何其他内容。",
                     },
                 ]
+            except LLMClientError:
+                # Infrastructure-level failure (bad API key, network, rate limit after
+                # tenacity retries exhausted): propagate so the API layer can return 503.
+                raise
             except Exception:
+                # Unexpected error: log with full traceback for observability, then
+                # degrade gracefully so the user sees a clarification prompt.
+                logger.warning("nlu_unexpected_error", exc_info=True)
                 return None
         return None
 

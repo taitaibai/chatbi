@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Any, Literal
 
 from pydantic import BaseModel, Field
@@ -49,6 +49,12 @@ class JoinClause(BaseModel):
     on: str
 
 
+class QueryColumn(BaseModel):
+    name: str
+    type: Literal["string", "number", "date"] = "string"
+    format: str | None = None
+
+
 class ResolvedQuery(BaseModel):
     tables: list[TableRef] = Field(default_factory=list)
     select_fields: list[FieldRef] = Field(default_factory=list)
@@ -59,9 +65,9 @@ class ResolvedQuery(BaseModel):
 
 
 class QueryResult(BaseModel):
-    columns: list[str]
+    columns: list[QueryColumn]
     rows: list[list[Any]]
-    row_count: int
+    total_rows: int
     execution_ms: int
 
 
@@ -79,7 +85,7 @@ class ChartSpec(BaseModel):
 class ConversationTurn(BaseModel):
     role: Literal["user", "assistant"]
     content: str
-    created_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
 
 
 class SessionContext(BaseModel):
@@ -87,8 +93,8 @@ class SessionContext(BaseModel):
     turns: list[ConversationTurn] = Field(default_factory=list)
     last_intent: ParsedIntent | None = None
     last_sql: str | None = None
-    created_at: datetime = Field(default_factory=datetime.utcnow)
-    updated_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+    updated_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
 
 
 class SemanticDimension(BaseModel):
@@ -105,6 +111,7 @@ class SemanticMetric(BaseModel):
     aliases: list[str] = Field(default_factory=list)
     expression: str
     base_table: str
+    joins: list[JoinClause] = Field(default_factory=list)
     filters: list[str] = Field(default_factory=list)
     format: str = "number"
     description: str = ""

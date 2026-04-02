@@ -3,7 +3,13 @@ from __future__ import annotations
 from collections.abc import AsyncGenerator, Sequence
 from typing import Any
 
-from openai import AsyncOpenAI
+from openai import (
+    APIConnectionError,
+    APITimeoutError,
+    AsyncOpenAI,
+    InternalServerError,
+    RateLimitError,
+)
 from tenacity import retry, retry_if_exception_type, stop_after_attempt, wait_exponential
 
 from config.settings import settings
@@ -33,13 +39,19 @@ class LLMClient:
         if not self._api_key:
             raise LLMClientError("OpenAI API key is not configured")
         if self._client is None:
-            self._client = AsyncOpenAI(api_key=self._api_key, base_url=self._base_url)
+            self._client = AsyncOpenAI(
+                api_key=self._api_key,
+                base_url=self._base_url,
+                timeout=settings.llm_timeout_seconds,
+            )
         return self._client
 
     @retry(
         wait=wait_exponential(multiplier=0.5, min=0.5, max=4),
         stop=stop_after_attempt(3),
-        retry=retry_if_exception_type(Exception),
+        retry=retry_if_exception_type(
+            (APIConnectionError, APITimeoutError, RateLimitError, InternalServerError)
+        ),
         reraise=True,
     )
     async def chat(
@@ -67,14 +79,38 @@ class LLMClient:
         temperature: float = 0.2,
         **kwargs: Any,
     ) -> AsyncGenerator[str, None]:
-        stream = await self._get_client().chat.completions.create(
-            model=model or self._default_model,
-            messages=list(messages),
+        # Only the connection-establishment step is retried; once the stream is
+        # open and tokens are flowing, mid-stream retries are not safe.
+        stream = await self._create_stream(
+            messages=messages,
+            model=model,
             temperature=temperature,
-            stream=True,
             **kwargs,
         )
         async for chunk in stream:
             delta = chunk.choices[0].delta.content if chunk.choices else None
             if delta:
                 yield delta
+
+    @retry(
+        wait=wait_exponential(multiplier=0.5, min=0.5, max=4),
+        stop=stop_after_attempt(3),
+        retry=retry_if_exception_type(
+            (APIConnectionError, APITimeoutError, RateLimitError, InternalServerError)
+        ),
+        reraise=True,
+    )
+    async def _create_stream(
+        self,
+        messages: Sequence[dict[str, Any]],
+        model: str | None = None,
+        temperature: float = 0.2,
+        **kwargs: Any,
+    ):  # type: ignore[return]  # openai streaming type is internal
+        return await self._get_client().chat.completions.create(
+            model=model or self._default_model,
+            messages=list(messages),
+            temperature=temperature,
+            stream=True,
+            **kwargs,
+        )

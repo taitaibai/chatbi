@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from datetime import date, timedelta
 
 from config.loader import get_semantic_model
@@ -28,10 +29,25 @@ class SemanticNotFoundError(ValueError):
 class SemanticService:
     """Maps ParsedIntent (business terms) → ResolvedQuery (physical tables/fields/SQL)."""
 
+    def __init__(self) -> None:
+        # Index cache: rebuilt only when the semantic model object changes (hot-reload safe)
+        self._cached_model_id: int | None = None
+        self._metric_index: dict[str, SemanticMetric] = {}
+        self._dimension_index: dict[str, tuple[str, str]] = {}
+
+    def _get_indexes(
+        self, model: SemanticModel
+    ) -> tuple[dict[str, SemanticMetric], dict[str, tuple[str, str]]]:
+        """Return (metric_index, dimension_index), rebuilding only on model identity change."""
+        if id(model) != self._cached_model_id:
+            self._metric_index = _build_metric_index(model)
+            self._dimension_index = _build_dimension_index(model)
+            self._cached_model_id = id(model)
+        return self._metric_index, self._dimension_index
+
     def resolve(self, intent: ParsedIntent) -> ResolvedQuery:
         model = get_semantic_model()
-        metric_index = _build_metric_index(model)
-        dimension_index = _build_dimension_index(model)
+        metric_index, dimension_index = self._get_indexes(model)
 
         # --- Resolve metrics ---
         resolved_metrics: list[SemanticMetric] = []
@@ -195,19 +211,57 @@ def _list_metric_names(model: SemanticModel) -> list[str]:
     return [m.name for domain in model.domains for m in domain.metrics]
 
 
+# Regex that only permits safe SQL identifiers (table.column or plain column).
+# Prevents injection via field name (e.g. "x OR 1=1 --").
+_SAFE_FIELD_RE = re.compile(r"^[a-zA-Z][a-zA-Z0-9_]{0,63}(\.[a-zA-Z][a-zA-Z0-9_]{0,63})?$")
+
+
+def _escape_str(value: str) -> str:
+    """ANSI SQL-compliant single-quote escape: ' → ''."""
+    return value.replace("'", "''")
+
+
 def _build_filter_clause(fc: FilterCondition) -> str | None:
+    # 1. Validate field name against safe-identifier pattern (prevents field-name injection)
+    if not _SAFE_FIELD_RE.match(fc.field):
+        return None
+
     op_map = {"eq": "=", "ne": "!=", "gt": ">", "gte": ">=", "lt": "<", "lte": "<="}
+
+    # 2. Handle NULL value comparisons
+    if fc.value is None:
+        if fc.op == "eq":
+            return f"{fc.field} IS NULL"
+        if fc.op == "ne":
+            return f"{fc.field} IS NOT NULL"
+        return None
+
     if fc.op in op_map:
-        value = f"'{fc.value}'" if isinstance(fc.value, str) else str(fc.value)
-        return f"{fc.field} {op_map[fc.op]} {value}"
-    if fc.op == "in":
-        if isinstance(fc.value, list):
-            vals = ", ".join(f"'{v}'" if isinstance(v, str) else str(v) for v in fc.value)
+        if isinstance(fc.value, str):
+            value_sql = f"'{_escape_str(fc.value)}'"
         else:
-            vals = f"'{fc.value}'"
-        return f"{fc.field} IN ({vals})"
+            value_sql = str(fc.value)
+        return f"{fc.field} {op_map[fc.op]} {value_sql}"
+
+    if fc.op == "in":
+        items: list[str]
+        if isinstance(fc.value, list):
+            items = [
+                f"'{_escape_str(v)}'" if isinstance(v, str) else str(v)
+                for v in fc.value
+                if v is not None
+            ]
+        else:
+            items = [f"'{_escape_str(fc.value)}'"]
+        if not items:
+            return None
+        return f"{fc.field} IN ({', '.join(items)})"
+
     if fc.op == "like":
-        return f"{fc.field} LIKE '{fc.value}'"
+        if isinstance(fc.value, str):
+            return f"{fc.field} LIKE '{_escape_str(fc.value)}'"
+        return None
+
     return None
 
 
