@@ -24,8 +24,8 @@ export interface TimeRange {
 
 export interface FilterCondition {
   field: string
-  operator: '=' | '!=' | '>' | '<' | '>=' | '<=' | 'IN' | 'NOT IN' | 'LIKE'
-  value: string | number | string[]
+  op: 'eq' | 'ne' | 'gt' | 'gte' | 'lt' | 'lte' | 'in' | 'like'
+  value: string | number | string[] | null
 }
 
 export interface IntentSummary {
@@ -52,6 +52,7 @@ export interface QueryData {
   columns: QueryColumn[]
   rows: (string | number | null)[][]
   total_rows: number
+  execution_ms?: number
 }
 
 // ─────────────────────────────────────────────

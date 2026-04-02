@@ -1,75 +1,33 @@
-import { useState } from 'react'
+import { useRef, useEffect, useState } from 'react'
 
-import type { ChatMessage } from '../types'
+import { useSSEChat } from '../hooks/useSSEChat'
+import { getClientIdentity } from '../api/chatbi'
 import { MessageBubble } from './MessageBubble'
 
-const initialMessages: ChatMessage[] = [
-  {
-    id: 'welcome',
-    role: 'assistant',
-    timestamp: Date.now() - 1000 * 60 * 5,
-    content: [
-      {
-        type: 'text',
-        payload: '请输入业务问题，例如：上周各渠道 GMV 对比。',
-      },
-    ],
-  },
-  {
-    id: 'demo',
-    role: 'assistant',
-    timestamp: Date.now() - 1000 * 60 * 4,
-    content: [
-      {
-        type: 'intent_summary',
-        payload: {
-          metrics: ['GMV'],
-          dimensions: ['渠道'],
-          time_range: {
-            type: 'last_week',
-            start: '2025-03-24',
-            end: '2025-03-30',
-          },
-          filters: [],
-          clarification_needed: false,
-          clarification_question: null,
-          clarification_options: [],
-        },
-      },
-      {
-        type: 'sql',
-        payload: "SELECT channel, SUM(amount) AS gmv FROM dw.fact_orders WHERE status = 'paid' GROUP BY channel",
-      },
-    ],
-  },
-]
-
 export function ChatWindow() {
-  const [messages, setMessages] = useState<ChatMessage[]>(initialMessages)
+  const [identity] = useState(() => getClientIdentity())
+  const { messages, sendMessage, isLoading, clearSession } = useSSEChat()
   const [query, setQuery] = useState('')
+  const messagesEndRef = useRef<HTMLDivElement>(null)
+
+  // 新消息到达时自动滚动到底部
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
+  }, [messages])
 
   const handleSubmit = (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault()
-    const trimmed = query.trim()
-    if (!trimmed) {
-      return
-    }
-    setMessages((current) => [
-      ...current,
-      {
-        id: `user-${Date.now()}`,
-        role: 'user',
-        timestamp: Date.now(),
-        content: [{ type: 'text', payload: trimmed }],
-      },
-      {
-        id: `placeholder-${Date.now() + 1}`,
-        role: 'assistant',
-        timestamp: Date.now(),
-        content: [{ type: 'loading', payload: null }],
-      },
-    ])
+    sendMessage(query)
     setQuery('')
+  }
+
+  const handleKeyDown = (event: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    // Ctrl/Cmd + Enter 发送
+    if (event.key === 'Enter' && (event.ctrlKey || event.metaKey)) {
+      event.preventDefault()
+      sendMessage(query)
+      setQuery('')
+    }
   }
 
   return (
@@ -77,11 +35,11 @@ export function ChatWindow() {
       <section className="chat-panel">
         <header className="chat-hero">
           <div>
-            <p className="chat-kicker">Wave 1 / Foundation</p>
+            <p className="chat-kicker">Wave 2 / Core Services</p>
             <h1>ChatBI Workspace</h1>
           </div>
           <p className="chat-description">
-            当前只交付基础模块层。界面保持静态演示，不接入 SSE 和真实查询。
+            SSE 流式对话已就绪。输入业务问题，系统将依次推送意图摘要 → SQL → 数据 → 解读。
           </p>
         </header>
 
@@ -90,24 +48,32 @@ export function ChatWindow() {
             {messages.map((message) => (
               <MessageBubble key={message.id} message={message} />
             ))}
+            <div ref={messagesEndRef} />
           </div>
 
           <aside className="chat-sidebar">
             <div className="sidebar-card">
-              <div className="sidebar-title">Wave 1 Modules</div>
+              <div className="sidebar-title">Wave 2 Modules</div>
+              <div className="sidebar-meta">Session: {identity.sessionId.slice(0, 18)}...</div>
+              <div className="sidebar-meta">User: {identity.userId.slice(0, 18)}...</div>
               <ul>
-                <li>LLM Client</li>
-                <li>Semantic YAML + Loader</li>
-                <li>Mock Adapter</li>
-                <li>Audit Logger</li>
-                <li>Security Checker</li>
-                <li>Visualization Rules</li>
-                <li>Session Manager</li>
+                <li>NLU Service</li>
+                <li>Semantic Service</li>
+                <li>Complexity Guard</li>
+                <li>Interpreter Service</li>
+                <li>SSE Hook (T-14)</li>
               </ul>
             </div>
             <div className="sidebar-card sidebar-card-accent">
-              <div className="sidebar-title">Next Wave</div>
-              <p>NLU、语义映射、复杂度守卫和解读服务会在 Wave 2 进入可调用状态。</p>
+              <div className="sidebar-title">操作</div>
+              <button
+                className="btn-clear"
+                onClick={clearSession}
+                disabled={isLoading}
+                type="button"
+              >
+                清除会话
+              </button>
             </div>
           </aside>
         </div>
@@ -116,10 +82,14 @@ export function ChatWindow() {
           <textarea
             value={query}
             onChange={(event) => setQuery(event.target.value)}
-            placeholder="输入你的分析问题"
+            onKeyDown={handleKeyDown}
+            placeholder={isLoading ? '正在处理中…' : '输入你的分析问题（Ctrl+Enter 发送）'}
             rows={3}
+            disabled={isLoading}
           />
-          <button type="submit">发送</button>
+          <button type="submit" disabled={isLoading || !query.trim()}>
+            {isLoading ? '处理中' : '发送'}
+          </button>
         </form>
       </section>
     </main>
