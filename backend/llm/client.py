@@ -3,6 +3,8 @@ from __future__ import annotations
 from collections.abc import AsyncGenerator, Sequence
 from typing import Any
 
+from models.schemas import TokenUsage
+
 from openai import (
     APIConnectionError,
     APITimeoutError,
@@ -71,6 +73,37 @@ class LLMClient:
         if not content:
             raise LLMClientError("Empty response returned from LLM")
         return content
+
+    @retry(
+        wait=wait_exponential(multiplier=0.5, min=0.5, max=4),
+        stop=stop_after_attempt(3),
+        retry=retry_if_exception_type(
+            (APIConnectionError, APITimeoutError, RateLimitError, InternalServerError)
+        ),
+        reraise=True,
+    )
+    async def chat_with_usage(
+        self,
+        messages: Sequence[dict[str, Any]],
+        model: str | None = None,
+        temperature: float = 0.2,
+        **kwargs: Any,
+    ) -> tuple[str, TokenUsage]:
+        """Like chat(), but also returns token usage for billing/audit purposes."""
+        response = await self._get_client().chat.completions.create(
+            model=model or self._default_model,
+            messages=list(messages),
+            temperature=temperature,
+            **kwargs,
+        )
+        content = response.choices[0].message.content
+        if not content:
+            raise LLMClientError("Empty response returned from LLM")
+        usage = TokenUsage(
+            prompt_tokens=response.usage.prompt_tokens if response.usage else 0,
+            completion_tokens=response.usage.completion_tokens if response.usage else 0,
+        )
+        return content, usage
 
     async def stream(
         self,

@@ -7,7 +7,7 @@ from typing import Any
 from jinja2 import Environment, FileSystemLoader
 
 from llm.client import LLMClient
-from models import FieldRef, ResolvedQuery
+from models import FieldRef, ResolvedQuery, TokenUsage
 
 _PROMPT_DIR = Path(__file__).resolve().parent.parent / "llm" / "prompts"
 _jinja_env = Environment(loader=FileSystemLoader(str(_PROMPT_DIR)), autoescape=False)
@@ -22,22 +22,29 @@ class SQLGenService:
         self._client = llm_client or LLMClient()
 
     async def generate(self, resolved: ResolvedQuery, query: str = "") -> str:
+        sql, _ = await self.generate_with_usage(resolved, query)
+        return sql
+
+    async def generate_with_usage(
+        self, resolved: ResolvedQuery, query: str = ""
+    ) -> tuple[str, TokenUsage]:
+        """Like generate(), but also returns LLM token usage for pipeline accounting."""
         if not resolved.tables:
             raise ValueError("ResolvedQuery must contain at least one table")
         if not resolved.select_fields:
             raise ValueError("ResolvedQuery must contain at least one select field")
 
         if not self._client.is_configured:
-            return _compile_sql(resolved)
+            return _compile_sql(resolved), TokenUsage()
 
         messages = _build_messages(resolved, query)
-        raw = await self._client.chat(
+        raw, usage = await self._client.chat_with_usage(
             messages=messages,
             model=_SQL_GEN_MODEL,
             temperature=0.0,
         )
         cleaned = _clean_sql(raw)
-        return cleaned or _compile_sql(resolved)
+        return cleaned or _compile_sql(resolved), usage
 
 
 def _build_messages(resolved: ResolvedQuery, query: str) -> list[dict[str, Any]]:

@@ -10,7 +10,7 @@ from jinja2 import Environment, FileSystemLoader
 
 from config.loader import get_semantic_model
 from llm.client import LLMClient, LLMClientError
-from models import FilterCondition, ParsedIntent, SemanticModel, SessionContext, TimeRange
+from models import FilterCondition, ParsedIntent, SemanticModel, SessionContext, TimeRange, TokenUsage
 
 logger = structlog.get_logger(__name__)
 
@@ -37,36 +37,53 @@ class NLUService:
         2 times on JSON parse failure; returns clarification_needed=True if all
         attempts are exhausted.
         """
+        intent, _ = await self.parse_with_usage(query, ctx)
+        return intent
+
+    async def parse_with_usage(
+        self, query: str, ctx: SessionContext
+    ) -> tuple[ParsedIntent, TokenUsage]:
+        """Like parse(), but also returns LLM token usage for pipeline accounting."""
         is_followup = _detect_followup(query)
         semantic_model = get_semantic_model()
         messages = _build_messages(query, ctx, semantic_model, is_followup)
 
-        raw = await self._call_with_retry(messages)
+        raw, usage = await self._call_with_retry_usage(messages)
         if raw is None:
             return ParsedIntent(
                 is_followup=is_followup,
                 clarification_needed=True,
                 clarification_question="抱歉，我暂时无法理解您的问题，能否换个方式描述？",
-            )
+            ), TokenUsage()
 
         data: dict[str, Any] = json.loads(raw)
-        return _build_intent(data, is_followup, ctx)
+        return _build_intent(data, is_followup, ctx), usage
 
     async def _call_with_retry(self, messages: list[dict[str, Any]]) -> str | None:
         """Attempt LLM call up to 3 times (initial + 2 retries) on JSON parse failure."""
+        raw, _ = await self._call_with_retry_usage(messages)
+        return raw
+
+    async def _call_with_retry_usage(
+        self, messages: list[dict[str, Any]]
+    ) -> tuple[str | None, TokenUsage]:
+        """Like _call_with_retry but also returns accumulated token usage."""
+        total_usage = TokenUsage()
         for attempt in range(3):
             try:
-                raw = await self._client.chat(
+                raw, usage = await self._client.chat_with_usage(
                     messages=messages,
                     model=_NLU_MODEL,
                     temperature=0.0,
                     response_format={"type": "json_object"},
                 )
+                total_usage.prompt_tokens += usage.prompt_tokens
+                total_usage.completion_tokens += usage.completion_tokens
                 json.loads(raw)  # Validate JSON before returning
-                return raw
+                return raw, total_usage
             except json.JSONDecodeError:
                 if attempt >= 2:
-                    return None
+                    return None, total_usage
                 # Retry: add a correction hint to encourage valid JSON output
                 messages = messages + [
                     {
@@ -86,8 +103,8 @@ class NLUService:
                 # Unexpected error: log with full traceback for observability, then
                 # degrade gracefully so the user sees a clarification prompt.
                 logger.warning("nlu_unexpected_error", exc_info=True)
-                return None
-        return None
+                return None, total_usage
+        return None, total_usage
 
 
 def _detect_followup(query: str) -> bool:
