@@ -4,8 +4,11 @@ import structlog
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from observability.audit import audit_logger
+from api.middleware import RateLimitMiddleware
+from api.v1.chat import router as chat_router
+from api.v1.semantic import router as semantic_router
 from config.settings import settings
+from observability.audit import audit_logger
 
 # 配置结构化日志
 structlog.configure(
@@ -37,6 +40,10 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+app.add_middleware(RateLimitMiddleware)
+
+app.include_router(chat_router)
+app.include_router(semantic_router)
 
 
 @app.get("/health", summary="健康检查", tags=["系统"])

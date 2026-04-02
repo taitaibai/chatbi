@@ -29,6 +29,18 @@ class ParsedIntent(BaseModel):
     clarification_question: str | None = None
 
 
+class ChatOptions(BaseModel):
+    show_sql: bool = True
+    show_intent: bool = True
+
+
+class ChatRequest(BaseModel):
+    session_id: str
+    query: str
+    user_id: str
+    options: ChatOptions = Field(default_factory=ChatOptions)
+
+
 class TableRef(BaseModel):
     id: str
     name: str

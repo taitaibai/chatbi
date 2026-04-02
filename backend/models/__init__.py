@@ -1,4 +1,6 @@
 from .schemas import (
+    ChatOptions,
+    ChatRequest,
     ChartSpec,
     ComplexityEstimate,
     ConversationTurn,
@@ -22,6 +24,8 @@ from .schemas import (
 
 __all__ = [
     "ChartSpec",
+    "ChatOptions",
+    "ChatRequest",
     "ComplexityEstimate",
     "ConversationTurn",
     "FieldRef",

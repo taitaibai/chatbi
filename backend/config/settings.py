@@ -60,6 +60,9 @@ class Settings(BaseSettings):
     admin_token: str = Field(
         default="change-me-in-production", description="管理接口鉴权 Token"
     )
+    rate_limit_per_minute: int = Field(
+        default=20, description="同一 user_id 每分钟最大请求数"
+    )
 
 
 settings = Settings()
