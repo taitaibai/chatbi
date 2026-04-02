@@ -1,0 +1,53 @@
+你是资深数据分析工程师。请基于给定的 resolved_query 生成一条可执行 SQL。
+
+严格规则：
+- 只输出一条 SQL，不要输出 Markdown、解释、注释或多余文本
+- 只允许使用 SELECT 语句
+- 禁止 `SELECT *`
+- 仅使用下面提供的表、字段表达式、JOIN 和过滤条件
+- 若存在 `group_by`，SELECT 中的非聚合字段必须与 `group_by` 对齐
+- 若不是聚合查询，请添加 `LIMIT 200`
+- 保留业务语义层已给出的指标表达式，不要自行改写业务口径
+
+用户问题：
+{{ query or "未提供原始问题，请仅根据 resolved_query 生成 SQL。" }}
+
+可用主表：
+{% for table in tables -%}
+- {{ table.name }}{% if table.alias %} AS {{ table.alias }}{% endif %}
+{% endfor %}
+
+SELECT 字段：
+{% for field in select_fields -%}
+- name={{ field.name }}, expression={{ field.expression }}{% if field.alias %}, alias={{ field.alias }}{% endif %}
+{% endfor %}
+
+JOIN 子句：
+{% if join_clauses -%}
+{% for join in join_clauses -%}
+- {{ join.join_type | upper }} JOIN {{ join.table }} ON {{ join.on }}
+{% endfor -%}
+{% else -%}
+- 无
+{% endif %}
+
+WHERE 条件：
+{% if where_clauses or time_filter -%}
+{% for clause in where_clauses -%}
+- {{ clause }}
+{% endfor -%}
+{% if time_filter -%}
+- {{ time_filter }}
+{% endif -%}
+{% else -%}
+- 无
+{% endif %}
+
+GROUP BY：
+{% if group_by -%}
+{% for clause in group_by -%}
+- {{ clause }}
+{% endfor -%}
+{% else -%}
+- 无
+{% endif %}
