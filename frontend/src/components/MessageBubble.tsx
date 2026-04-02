@@ -1,4 +1,8 @@
 import type { ChartSpec, ChatMessage, IntentSummary, MessageContent, QueryData } from '../types'
+import { ChartRenderer } from './ChartRenderer'
+import { IntentSummaryCard } from './IntentSummaryCard'
+import { ResultTable } from './ResultTable'
+import { SQLPanel } from './SQLPanel'
 
 function isIntentSummary(payload: MessageContent['payload']): payload is IntentSummary {
   return typeof payload === 'object' && payload !== null && 'metrics' in payload
@@ -18,57 +22,43 @@ function renderContent(content: MessageContent, index: number) {
   }
 
   if (content.type === 'intent_summary' && isIntentSummary(content.payload)) {
-    const summary = content.payload
-    return (
-      <div key={index} className="message-card">
-        <div className="message-card-title">Intent Summary</div>
-        <div>指标：{summary.metrics.join('、') || '待解析'}</div>
-        <div>维度：{summary.dimensions.join('、') || '待解析'}</div>
-        <div>时间：{summary.time_range ? `${summary.time_range.start} ~ ${summary.time_range.end}` : '未指定'}</div>
-      </div>
-    )
+    return <IntentSummaryCard key={index} summary={content.payload} />
   }
 
   if (content.type === 'sql' && typeof content.payload === 'string') {
-    return (
-      <pre key={index} className="message-code">
-        {content.payload}
-      </pre>
-    )
+    return <SQLPanel key={index} sql={content.payload} />
   }
 
   if (content.type === 'table_data' && isQueryData(content.payload)) {
-    const table = content.payload
+    return <ResultTable key={index} data={content.payload} />
+  }
+
+  if (content.type === 'chart_spec' && isChartSpec(content.payload)) {
     return (
-      <div key={index} className="message-table-wrap">
-        <table className="message-table">
-          <thead>
-            <tr>
-              {table.columns.map((column: QueryData['columns'][number]) => (
-                <th key={column.name}>{column.name}</th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {table.rows.map((row: QueryData['rows'][number], rowIndex: number) => (
-              <tr key={rowIndex}>
-                {row.map((cell: QueryData['rows'][number][number], cellIndex: number) => (
-                  <td key={cellIndex}>{cell ?? '-'}</td>
-                ))}
-              </tr>
-            ))}
-          </tbody>
-        </table>
+      <section key={index} className="biz-card message-chart">
+        <header className="biz-card-header">
+          <div>
+            <p className="biz-card-eyebrow">Visualization</p>
+            <h3>图表展示</h3>
+          </div>
+        </header>
+        <ChartRenderer spec={content.payload} />
+      </section>
+    )
+  }
+
+  if (content.type === 'error' && typeof content.payload === 'string') {
+    return (
+      <div key={index} className="message-error">
+        {content.payload}
       </div>
     )
   }
 
-  if (content.type === 'chart_spec' && isChartSpec(content.payload)) {
-    const chart = content.payload
+  if (content.type === 'interpretation' && typeof content.payload === 'string') {
     return (
-      <div key={index} className="message-card">
-        <div className="message-card-title">Chart Spec</div>
-        <div>类型：{chart.type}</div>
+      <div key={index} className="message-interpretation">
+        {content.payload}
       </div>
     )
   }
