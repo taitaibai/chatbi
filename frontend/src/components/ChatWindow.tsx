@@ -6,7 +6,7 @@ import { MessageBubble } from './MessageBubble'
 
 export function ChatWindow() {
   const [identity] = useState(() => getClientIdentity())
-  const { messages, sendMessage, isLoading, clearSession } = useSSEChat()
+  const { messages, sendMessage, isLoading, clearSession, error } = useSSEChat()
   const [query, setQuery] = useState('')
   const messagesEndRef = useRef<HTMLDivElement>(null)
 
@@ -35,11 +35,11 @@ export function ChatWindow() {
       <section className="chat-panel">
         <header className="chat-hero">
           <div>
-            <p className="chat-kicker">Wave 2 / Core Services</p>
+            <p className="chat-kicker">Wave 5 / Frontend Full Integration</p>
             <h1>ChatBI Workspace</h1>
           </div>
           <p className="chat-description">
-            SSE 流式对话已就绪。输入业务问题，系统将依次推送意图摘要 → SQL → 数据 → 解读。
+            终态集成已接通。输入业务问题后，界面会按意图摘要、SQL、结果表、图表和流式解读逐段渲染。
           </p>
         </header>
 
@@ -53,19 +53,23 @@ export function ChatWindow() {
 
           <aside className="chat-sidebar">
             <div className="sidebar-card">
-              <div className="sidebar-title">Wave 2 Modules</div>
+              <div className="sidebar-title">Live Session</div>
               <div className="sidebar-meta">Session: {identity.sessionId.slice(0, 18)}...</div>
               <div className="sidebar-meta">User: {identity.userId.slice(0, 18)}...</div>
               <ul>
-                <li>NLU Service</li>
-                <li>Semantic Service</li>
-                <li>Complexity Guard</li>
-                <li>Interpreter Service</li>
-                <li>SSE Hook (T-14)</li>
+                <li>Intent Summary</li>
+                <li>SQL Transparency</li>
+                <li>Result Table</li>
+                <li>Chart Renderer</li>
+                <li>Interpretation Stream</li>
               </ul>
             </div>
             <div className="sidebar-card sidebar-card-accent">
               <div className="sidebar-title">操作</div>
+              <div className="sidebar-meta sidebar-meta-light">
+                {isLoading ? '当前正在消费 SSE 流' : '当前没有进行中的请求'}
+              </div>
+              {error ? <div className="sidebar-alert">{error}</div> : null}
               <button
                 className="btn-clear"
                 onClick={clearSession}

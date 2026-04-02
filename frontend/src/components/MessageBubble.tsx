@@ -1,5 +1,13 @@
-import type { ChartSpec, ChatMessage, IntentSummary, MessageContent, QueryData } from '../types'
+import type {
+  ChartSpec,
+  ChatMessage,
+  IntentSummary,
+  MessageContent,
+  QueryData,
+  StreamErrorPayload,
+} from '../types'
 import { ChartRenderer } from './ChartRenderer'
+import { ClarificationCard } from './ClarificationCard'
 import { IntentSummaryCard } from './IntentSummaryCard'
 import { ResultTable } from './ResultTable'
 import { SQLPanel } from './SQLPanel'
@@ -14,6 +22,10 @@ function isQueryData(payload: MessageContent['payload']): payload is QueryData {
 
 function isChartSpec(payload: MessageContent['payload']): payload is ChartSpec {
   return typeof payload === 'object' && payload !== null && 'type' in payload && 'echarts_option' in payload
+}
+
+function isStreamErrorPayload(payload: MessageContent['payload']): payload is StreamErrorPayload {
+  return typeof payload === 'object' && payload !== null && 'message' in payload
 }
 
 function renderContent(content: MessageContent, index: number) {
@@ -55,6 +67,18 @@ function renderContent(content: MessageContent, index: number) {
     )
   }
 
+  if (content.type === 'error' && isStreamErrorPayload(content.payload)) {
+    if (content.payload.code === 'clarification_needed' || content.payload.code === 'semantic_not_found') {
+      return <ClarificationCard key={index} payload={content.payload} />
+    }
+
+    return (
+      <div key={index} className="message-error">
+        {content.payload.message}
+      </div>
+    )
+  }
+
   if (content.type === 'interpretation' && typeof content.payload === 'string') {
     return (
       <div key={index} className="message-interpretation">
@@ -75,6 +99,8 @@ interface MessageBubbleProps {
 }
 
 export function MessageBubble({ message }: MessageBubbleProps) {
+  const hasTokenUsage = Boolean(message.meta?.tokenUsage)
+
   return (
     <article className={`message-bubble message-bubble-${message.role}`}>
       <header className="message-meta">
@@ -84,6 +110,20 @@ export function MessageBubble({ message }: MessageBubbleProps) {
       <div className="message-body">
         {message.content.map((content, index) => renderContent(content, index))}
       </div>
+      {message.role === 'assistant' && (message.status || message.meta) ? (
+        <footer className="message-footer">
+          <span className={`message-status message-status-${message.status ?? 'streaming'}`}>
+            {message.status === 'done' ? '已完成' : message.status === 'error' ? '已中断' : '流式处理中'}
+          </span>
+          {typeof message.meta?.latencyMs === 'number' ? <span>{message.meta.latencyMs} ms</span> : null}
+          {hasTokenUsage ? (
+            <span>
+              Tokens {message.meta?.tokenUsage?.prompt}/{message.meta?.tokenUsage?.completion}
+            </span>
+          ) : null}
+          {message.meta?.requestId ? <span>ID {message.meta.requestId}</span> : null}
+        </footer>
+      ) : null}
     </article>
   )
 }

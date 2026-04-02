@@ -8,7 +8,14 @@
  */
 
 import { useReducer, useRef, useCallback, useEffect } from 'react'
-import type { ChatMessage, ChartSpec, IntentSummary, QueryData } from '../types'
+import type {
+  ChatMessage,
+  ChartSpec,
+  IntentSummary,
+  QueryData,
+  StreamDonePayload,
+  StreamErrorPayload,
+} from '../types'
 import {
   buildChatRequest,
   getClientIdentity,
@@ -33,8 +40,8 @@ type Action =
   | { type: 'TABLE_DATA'; id: string; payload: QueryData }
   | { type: 'CHART_SPEC'; id: string; payload: ChartSpec }
   | { type: 'INTERPRETATION_TOKEN'; id: string; token: string }
-  | { type: 'BOT_ERROR'; id: string; msg: string }
-  | { type: 'DONE' }
+  | { type: 'BOT_ERROR'; id: string; payload: StreamErrorPayload }
+  | { type: 'DONE'; id: string; payload: StreamDonePayload | null }
   | { type: 'CLEAR' }
 
 // ─────────────────────────────────────────────
@@ -68,6 +75,17 @@ function patchMessage(
   return messages.map((m) => (m.id === id ? updater(m) : m))
 }
 
+function appendAssistantContent(
+  msg: ChatMessage,
+  content: ChatMessage['content'][number],
+): ChatMessage {
+  return {
+    ...msg,
+    status: 'streaming',
+    content: [...msg.content.filter((entry) => entry.type !== 'loading'), content],
+  }
+}
+
 function reducer(state: State, action: Action): State {
   switch (action.type) {
     case 'SEND':
@@ -81,41 +99,33 @@ function reducer(state: State, action: Action): State {
     case 'INTENT_SUMMARY':
       return {
         ...state,
-        messages: patchMessage(state.messages, action.id, (msg) => ({
-          ...msg,
-          // 移除 loading 占位符，插入意图摘要
-          content: [
-            ...msg.content.filter((c) => c.type !== 'loading'),
-            { type: 'intent_summary', payload: action.payload },
-          ],
-        })),
+        messages: patchMessage(state.messages, action.id, (msg) =>
+          appendAssistantContent(msg, { type: 'intent_summary', payload: action.payload }),
+        ),
       }
 
     case 'SQL':
       return {
         ...state,
-        messages: patchMessage(state.messages, action.id, (msg) => ({
-          ...msg,
-          content: [...msg.content, { type: 'sql', payload: action.sql }],
-        })),
+        messages: patchMessage(state.messages, action.id, (msg) =>
+          appendAssistantContent(msg, { type: 'sql', payload: action.sql }),
+        ),
       }
 
     case 'TABLE_DATA':
       return {
         ...state,
-        messages: patchMessage(state.messages, action.id, (msg) => ({
-          ...msg,
-          content: [...msg.content, { type: 'table_data', payload: action.payload }],
-        })),
+        messages: patchMessage(state.messages, action.id, (msg) =>
+          appendAssistantContent(msg, { type: 'table_data', payload: action.payload }),
+        ),
       }
 
     case 'CHART_SPEC':
       return {
         ...state,
-        messages: patchMessage(state.messages, action.id, (msg) => ({
-          ...msg,
-          content: [...msg.content, { type: 'chart_spec', payload: action.payload }],
-        })),
+        messages: patchMessage(state.messages, action.id, (msg) =>
+          appendAssistantContent(msg, { type: 'chart_spec', payload: action.payload }),
+        ),
       }
 
     case 'INTERPRETATION_TOKEN': {
@@ -127,6 +137,7 @@ function reducer(state: State, action: Action): State {
             // 追加 token 到已有的 interpretation 内容项
             return {
               ...msg,
+              status: 'streaming',
               content: msg.content.map((c) =>
                 c.type === 'interpretation'
                   ? { ...c, payload: (c.payload as string) + action.token }
@@ -137,7 +148,11 @@ function reducer(state: State, action: Action): State {
           // 首个 token：新建 interpretation 内容项
           return {
             ...msg,
-            content: [...msg.content, { type: 'interpretation', payload: action.token }],
+            status: 'streaming',
+            content: [
+              ...msg.content.filter((entry) => entry.type !== 'loading'),
+              { type: 'interpretation', payload: action.token },
+            ],
           }
         }),
       }
@@ -148,17 +163,30 @@ function reducer(state: State, action: Action): State {
         ...state,
         messages: patchMessage(state.messages, action.id, (msg) => ({
           ...msg,
+          status: 'error',
           content: [
             ...msg.content.filter((c) => c.type !== 'loading'),
-            { type: 'error', payload: action.msg },
+            { type: 'error', payload: action.payload },
           ],
         })),
         isLoading: false,
-        error: action.msg,
+        error: action.payload.message,
       }
 
     case 'DONE':
-      return { ...state, isLoading: false }
+      return {
+        ...state,
+        messages: patchMessage(state.messages, action.id, (msg) => ({
+          ...msg,
+          status: 'done',
+          meta: {
+            requestId: action.payload?.request_id ?? null,
+            latencyMs: action.payload?.latency_ms ?? null,
+            tokenUsage: action.payload?.token_usage ?? null,
+          },
+        })),
+        isLoading: false,
+      }
 
     case 'CLEAR':
       return {
@@ -226,6 +254,7 @@ export function useSSEChat(): UseSSEChatReturn {
       role: 'assistant',
       timestamp: now,
       content: [{ type: 'loading', payload: null }],
+      status: 'streaming',
     }
 
     dispatch({ type: 'SEND', userMsg, botMsg })
@@ -265,22 +294,32 @@ export function useSSEChat(): UseSSEChatReturn {
               break
             }
             case 'error': {
-              const parsed = JSON.parse(data) as { message?: string; code?: string }
-              dispatch({ type: 'BOT_ERROR', id: botId, msg: parsed.message ?? '查询失败，请重试' })
+              const parsed = JSON.parse(data) as Partial<StreamErrorPayload>
+              dispatch({
+                type: 'BOT_ERROR',
+                id: botId,
+                payload: {
+                  code: parsed.code,
+                  message: parsed.message ?? '查询失败，请重试',
+                  available_metrics: parsed.available_metrics,
+                  suggestion: parsed.suggestion,
+                },
+              })
               return
             }
             case 'done': {
-              dispatch({ type: 'DONE' })
+              const parsed = JSON.parse(data) as StreamDonePayload
+              dispatch({ type: 'DONE', id: botId, payload: parsed })
               return
             }
           }
         }
         // 流正常结束但未收到 done 事件时兜底
-        dispatch({ type: 'DONE' })
+        dispatch({ type: 'DONE', id: botId, payload: null })
       } catch (err) {
         if (!controller.signal.aborted) {
           const msg = err instanceof Error ? err.message : '请求失败，请重试'
-          dispatch({ type: 'BOT_ERROR', id: botId, msg })
+          dispatch({ type: 'BOT_ERROR', id: botId, payload: { message: msg } })
         }
       }
     })()

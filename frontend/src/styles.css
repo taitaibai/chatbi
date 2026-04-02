@@ -123,6 +123,39 @@ textarea {
   gap: 12px;
 }
 
+.message-footer {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 14px;
+  font-size: 12px;
+  color: #64748b;
+}
+
+.message-status {
+  display: inline-flex;
+  align-items: center;
+  min-height: 24px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-weight: 700;
+}
+
+.message-status-streaming {
+  background: rgba(15, 118, 110, 0.08);
+  color: #0f766e;
+}
+
+.message-status-done {
+  background: rgba(34, 197, 94, 0.12);
+  color: #166534;
+}
+
+.message-status-error {
+  background: rgba(220, 38, 38, 0.08);
+  color: #b91c1c;
+}
+
 .message-card,
 .sidebar-card {
   border-radius: 18px;
@@ -198,6 +231,20 @@ textarea {
   color: #fde68a;
 }
 
+.sidebar-meta-light {
+  color: rgba(248, 250, 252, 0.78);
+}
+
+.sidebar-alert {
+  margin-top: 12px;
+  border-radius: 12px;
+  padding: 10px 12px;
+  background: rgba(255, 255, 255, 0.12);
+  color: #fff7ed;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
 .chat-input {
   display: flex;
   gap: 16px;
@@ -245,6 +292,21 @@ textarea {
   line-height: 1.7;
   white-space: pre-wrap;
   color: #1e293b;
+}
+
+.clarification-card {
+  background: linear-gradient(180deg, rgba(255, 247, 237, 0.96), rgba(255, 251, 235, 0.96));
+}
+
+.clarification-message,
+.clarification-suggestion {
+  margin: 0;
+  line-height: 1.7;
+  color: #7c2d12;
+}
+
+.clarification-suggestion {
+  margin-top: 10px;
 }
 
 /* ─── ECharts 图表容器 ──────────────────── */

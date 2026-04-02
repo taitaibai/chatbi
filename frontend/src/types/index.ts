@@ -66,6 +66,24 @@ export interface ChartSpec {
   echarts_option: Record<string, unknown>  // ECharts option JSON
 }
 
+export interface TokenUsage {
+  prompt: number
+  completion: number
+}
+
+export interface StreamDonePayload {
+  request_id: string | null
+  latency_ms?: number | null
+  token_usage?: TokenUsage | null
+}
+
+export interface StreamErrorPayload {
+  code?: string
+  message: string
+  available_metrics?: string[]
+  suggestion?: string
+}
+
 // ─────────────────────────────────────────────
 // SSE 事件类型
 // ─────────────────────────────────────────────
@@ -94,7 +112,13 @@ export type MessageContentType = 'text' | 'loading' | 'error' | 'intent_summary'
 
 export interface MessageContent {
   type: MessageContentType
-  payload?: IntentSummary | string | QueryData | ChartSpec | null
+  payload?: IntentSummary | string | QueryData | ChartSpec | StreamErrorPayload | null
+}
+
+export interface MessageMeta {
+  requestId?: string | null
+  latencyMs?: number | null
+  tokenUsage?: TokenUsage | null
 }
 
 export interface ChatMessage {
@@ -102,6 +126,8 @@ export interface ChatMessage {
   role: MessageRole
   content: MessageContent[]
   timestamp: number
+  status?: 'streaming' | 'done' | 'error'
+  meta?: MessageMeta
 }
 
 // ─────────────────────────────────────────────
