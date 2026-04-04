@@ -229,6 +229,14 @@ export function useSSEChat(): UseSSEChatReturn {
     }
   }, [])
 
+  const safeParse = useCallback(<T,>(data: string): T | null => {
+    try {
+      return JSON.parse(data) as T
+    } catch {
+      return null
+    }
+  }, [])
+
   const sendMessage = useCallback((query: string) => {
     const trimmed = query.trim()
     if (!trimmed || isLoadingRef.current) return
@@ -267,48 +275,56 @@ export function useSSEChat(): UseSSEChatReturn {
 
           switch (event) {
             case 'intent_summary': {
-              const payload = JSON.parse(data) as IntentSummary
-              dispatch({ type: 'INTENT_SUMMARY', id: botId, payload })
+              const payload = safeParse<IntentSummary>(data)
+              if (payload) {
+                dispatch({ type: 'INTENT_SUMMARY', id: botId, payload })
+              }
               break
             }
             case 'sql': {
-              const parsed = JSON.parse(data) as { sql: string }
-              dispatch({ type: 'SQL', id: botId, sql: parsed.sql })
+              const parsed = safeParse<{ sql: string }>(data)
+              if (parsed?.sql) {
+                dispatch({ type: 'SQL', id: botId, sql: parsed.sql })
+              }
               break
             }
             case 'table_data': {
-              const raw = JSON.parse(data) as Parameters<typeof normalizeQueryResult>[0]
-              dispatch({ type: 'TABLE_DATA', id: botId, payload: normalizeQueryResult(raw) })
+              const raw = safeParse<Parameters<typeof normalizeQueryResult>[0]>(data)
+              if (raw) {
+                dispatch({ type: 'TABLE_DATA', id: botId, payload: normalizeQueryResult(raw) })
+              }
               break
             }
             case 'chart_spec': {
-              const payload = JSON.parse(data) as ChartSpec
-              dispatch({ type: 'CHART_SPEC', id: botId, payload })
+              const payload = safeParse<ChartSpec>(data)
+              if (payload) {
+                dispatch({ type: 'CHART_SPEC', id: botId, payload })
+              }
               break
             }
             case 'interpretation': {
-              const parsed = JSON.parse(data) as { token: string; done: boolean }
-              if (parsed.token) {
+              const parsed = safeParse<{ token: string; done: boolean }>(data)
+              if (parsed?.token) {
                 dispatch({ type: 'INTERPRETATION_TOKEN', id: botId, token: parsed.token })
               }
               break
             }
             case 'error': {
-              const parsed = JSON.parse(data) as Partial<StreamErrorPayload>
+              const parsed = safeParse<Partial<StreamErrorPayload>>(data)
               dispatch({
                 type: 'BOT_ERROR',
                 id: botId,
                 payload: {
-                  code: parsed.code,
-                  message: parsed.message ?? '查询失败，请重试',
-                  available_metrics: parsed.available_metrics,
-                  suggestion: parsed.suggestion,
+                  code: parsed?.code,
+                  message: parsed?.message ?? '查询失败，请重试',
+                  available_metrics: parsed?.available_metrics,
+                  suggestion: parsed?.suggestion,
                 },
               })
               return
             }
             case 'done': {
-              const parsed = JSON.parse(data) as StreamDonePayload
+              const parsed = safeParse<StreamDonePayload>(data)
               dispatch({ type: 'DONE', id: botId, payload: parsed })
               return
             }
@@ -323,7 +339,7 @@ export function useSSEChat(): UseSSEChatReturn {
         }
       }
     })()
-  }, []) // sendMessage 引用稳定，通过 ref 感知 isLoading 变化
+  }, [safeParse]) // sendMessage 引用稳定，通过 ref 感知 isLoading 变化
 
   const clearSession = useCallback(() => {
     abortRef.current?.abort()

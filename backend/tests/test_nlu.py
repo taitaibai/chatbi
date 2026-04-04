@@ -37,11 +37,13 @@ def _make_ctx(
 
 def _make_service(llm_response: str | None = None, raises: Exception | None = None) -> NLUService:
     """Build NLUService with a mocked LLM client."""
+    from models.schemas import TokenUsage
+
     mock_client = MagicMock()
     if raises is not None:
-        mock_client.chat = AsyncMock(side_effect=raises)
+        mock_client.chat_with_usage = AsyncMock(side_effect=raises)
     else:
-        mock_client.chat = AsyncMock(return_value=llm_response)
+        mock_client.chat_with_usage = AsyncMock(return_value=(llm_response, TokenUsage()))
     return NLUService(llm_client=mock_client)
 
 

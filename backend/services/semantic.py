@@ -3,7 +3,7 @@ from __future__ import annotations
 import re
 from datetime import date, timedelta
 
-from config.loader import get_semantic_model
+from config.loader import get_semantic_model, get_semantic_model_version
 from models.schemas import (
     FieldRef,
     FilterCondition,
@@ -30,19 +30,20 @@ class SemanticService:
     """Maps ParsedIntent (business terms) → ResolvedQuery (physical tables/fields/SQL)."""
 
     def __init__(self) -> None:
-        # Index cache: rebuilt only when the semantic model object changes (hot-reload safe)
-        self._cached_model_id: int | None = None
+        # Index cache: rebuilt when the loader version changes.
+        self._cached_model_version: int | None = None
         self._metric_index: dict[str, SemanticMetric] = {}
         self._dimension_index: dict[str, tuple[str, str]] = {}
 
     def _get_indexes(
         self, model: SemanticModel
     ) -> tuple[dict[str, SemanticMetric], dict[str, tuple[str, str]]]:
-        """Return (metric_index, dimension_index), rebuilding only on model identity change."""
-        if id(model) != self._cached_model_id:
+        """Return (metric_index, dimension_index), rebuilding only on semantic reload."""
+        model_version = get_semantic_model_version()
+        if model_version != self._cached_model_version:
             self._metric_index = _build_metric_index(model)
             self._dimension_index = _build_dimension_index(model)
-            self._cached_model_id = id(model)
+            self._cached_model_version = model_version
         return self._metric_index, self._dimension_index
 
     def resolve(self, intent: ParsedIntent) -> ResolvedQuery:

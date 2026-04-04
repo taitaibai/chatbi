@@ -16,6 +16,7 @@ if str(BACKEND_ROOT) not in sys.path:
 from main import app
 from models import ChartSpec, ParsedIntent, QueryColumn, QueryResult, RequestTrace, TimeRange, TokenUsage
 from services.pipeline import PipelineResult
+from api.middleware import RateLimitMiddleware
 
 
 async def _fake_interpretation() -> AsyncGenerator[str, None]:
@@ -154,3 +155,30 @@ class TestChatAPI(unittest.TestCase):
 
         self.assertEqual(blocked.status_code, 429)
         self.assertEqual(blocked.json()["code"], "rate_limit_exceeded")
+
+    def test_rate_limit_accepts_user_id_from_header(self) -> None:
+        request = {
+            "session_id": "sess-header-user",
+            "query": "查询上周各渠道GMV",
+            "user_id": "user-in-body",
+            "options": {"show_sql": False, "show_intent": False},
+        }
+
+        with patch("api.v1.chat.query_pipeline", _FakePipeline()):
+            response = self.client.post(
+                "/api/v1/chat",
+                json=request,
+                headers={"X-User-Id": "user-from-header"},
+            )
+
+        self.assertEqual(response.status_code, 200)
+
+    def test_rate_limit_removes_empty_buckets_after_window_expires(self) -> None:
+        middleware = RateLimitMiddleware(app=lambda *_: None, max_requests_per_minute=2)
+        middleware._requests["user-a"].append(10.0)
+
+        with patch("api.middleware.time.time", return_value=100.0):
+            bucket = middleware._prune_bucket("user-a", 100.0)
+
+        self.assertNotIn("user-a", middleware._requests)
+        self.assertIsNone(bucket)

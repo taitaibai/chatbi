@@ -20,6 +20,7 @@ class SemanticConfigLoader:
         self._lock = RLock()
         self._cached_model: SemanticModel | None = None
         self._cached_mtime: float | None = None
+        self._version = 0
 
     def _resolve_path(self, config_path: str | Path) -> Path:
         path = Path(config_path)
@@ -57,7 +58,12 @@ class SemanticConfigLoader:
 
             self._cached_model = model
             self._cached_mtime = mtime
+            self._version += 1
             return model
+
+    def get_version(self) -> int:
+        with self._lock:
+            return self._version
 
 
 _loader = SemanticConfigLoader()
@@ -65,3 +71,7 @@ _loader = SemanticConfigLoader()
 
 def get_semantic_model(force_reload: bool = False) -> SemanticModel:
     return _loader.load_semantic_model(force_reload=force_reload)
+
+
+def get_semantic_model_version() -> int:
+    return _loader.get_version()

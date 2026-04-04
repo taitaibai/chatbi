@@ -129,7 +129,8 @@ class AuditLogger:
                 self._queue.task_done()
 
     async def _write(self, trace: RequestTrace) -> None:
-        assert self._db is not None, "AuditLogger.initialize() must be called before writing"
+        if self._db is None:
+            raise RuntimeError("AuditLogger.initialize() must be called before writing")
         await self._db.execute(
             _INSERT_SQL,
             (

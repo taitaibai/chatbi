@@ -1,4 +1,5 @@
 import os
+from contextlib import asynccontextmanager
 
 import structlog
 from fastapi import FastAPI
@@ -25,17 +26,37 @@ structlog.configure(
 
 logger = structlog.get_logger(__name__)
 
+
+@asynccontextmanager
+async def lifespan(_: FastAPI):
+    _check_admin_token_safety()
+    _check_openai_api_key()
+    await audit_logger.initialize()
+    logger.info(
+        "chatbi_startup",
+        llm_model=settings.llm_model,
+        datasource_type=settings.datasource_type,
+        log_level=settings.log_level,
+        semantic_model_path=settings.semantic_model_path,
+    )
+    try:
+        yield
+    finally:
+        await audit_logger.close()
+
+
 app = FastAPI(
     title="ChatBI API",
     description="面向数据分析的自然语言交互式分析系统",
     version="0.1.0",
     docs_url="/docs",
     redoc_url="/redoc",
+    lifespan=lifespan,
 )
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173", "http://127.0.0.1:5173"],
+    allow_origins=settings.allowed_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -49,24 +70,6 @@ app.include_router(semantic_router)
 @app.get("/health", summary="健康检查", tags=["系统"])
 async def health_check() -> dict:
     return {"status": "ok"}
-
-
-@app.on_event("startup")
-async def on_startup() -> None:
-    _check_admin_token_safety()
-    await audit_logger.initialize()
-    logger.info(
-        "chatbi_startup",
-        llm_model=settings.llm_model,
-        datasource_type=settings.datasource_type,
-        log_level=settings.log_level,
-        semantic_model_path=settings.semantic_model_path,
-    )
-
-
-@app.on_event("shutdown")
-async def on_shutdown() -> None:
-    await audit_logger.close()
 
 
 _DEFAULT_ADMIN_TOKEN = "change-me-in-production"
@@ -91,4 +94,12 @@ def _check_admin_token_safety() -> None:
     logger.warning(
         "admin_token_default_value",
         message="admin_token is using the default value — change ADMIN_TOKEN before deploying to production",
+    )
+
+
+def _check_openai_api_key() -> None:
+    if settings.datasource_type == "mock" or settings.openai_api_key.strip():
+        return
+    raise RuntimeError(
+        "llm_api_key is empty. Set OPENAI_API_KEY, MINIMAX_API_KEY, or LLM_API_KEY before starting the service."
     )

@@ -6,13 +6,14 @@ from typing import Any
 
 from jinja2 import Environment, FileSystemLoader
 
+from config.settings import settings
 from llm.client import LLMClient
 from models import FieldRef, ResolvedQuery, TokenUsage
 
 _PROMPT_DIR = Path(__file__).resolve().parent.parent / "llm" / "prompts"
 _jinja_env = Environment(loader=FileSystemLoader(str(_PROMPT_DIR)), autoescape=False)
 
-_SQL_GEN_MODEL = "gpt-4o"
+_SQL_GEN_MODEL = settings.llm_model
 _SAFE_IDENTIFIER_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 _AGGREGATE_RE = re.compile(r"\b(sum|count|avg|min|max)\s*\(", re.IGNORECASE)
 

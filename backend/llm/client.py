@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 from collections.abc import AsyncGenerator, Sequence
 from typing import Any
 
@@ -27,11 +28,14 @@ class LLMClient:
         api_key: str | None = None,
         base_url: str | None = None,
         default_model: str | None = None,
+        max_concurrent: int | None = None,
     ) -> None:
         self._api_key = api_key or settings.openai_api_key
         self._base_url = base_url or settings.llm_base_url
         self._default_model = default_model or settings.llm_model
         self._client: AsyncOpenAI | None = None
+        _limit = max_concurrent if max_concurrent is not None else settings.llm_max_concurrent
+        self._semaphore = asyncio.Semaphore(_limit)
 
     @property
     def is_configured(self) -> bool:
@@ -63,12 +67,13 @@ class LLMClient:
         temperature: float = 0.2,
         **kwargs: Any,
     ) -> str:
-        response = await self._get_client().chat.completions.create(
-            model=model or self._default_model,
-            messages=list(messages),
-            temperature=temperature,
-            **kwargs,
-        )
+        async with self._semaphore:
+            response = await self._get_client().chat.completions.create(
+                model=model or self._default_model,
+                messages=list(messages),
+                temperature=temperature,
+                **kwargs,
+            )
         content = response.choices[0].message.content
         if not content:
             raise LLMClientError("Empty response returned from LLM")
@@ -90,12 +95,13 @@ class LLMClient:
         **kwargs: Any,
     ) -> tuple[str, TokenUsage]:
         """Like chat(), but also returns token usage for billing/audit purposes."""
-        response = await self._get_client().chat.completions.create(
-            model=model or self._default_model,
-            messages=list(messages),
-            temperature=temperature,
-            **kwargs,
-        )
+        async with self._semaphore:
+            response = await self._get_client().chat.completions.create(
+                model=model or self._default_model,
+                messages=list(messages),
+                temperature=temperature,
+                **kwargs,
+            )
         content = response.choices[0].message.content
         if not content:
             raise LLMClientError("Empty response returned from LLM")
@@ -114,12 +120,13 @@ class LLMClient:
     ) -> AsyncGenerator[str, None]:
         # Only the connection-establishment step is retried; once the stream is
         # open and tokens are flowing, mid-stream retries are not safe.
-        stream = await self._create_stream(
-            messages=messages,
-            model=model,
-            temperature=temperature,
-            **kwargs,
-        )
+        async with self._semaphore:
+            stream = await self._create_stream(
+                messages=messages,
+                model=model,
+                temperature=temperature,
+                **kwargs,
+            )
         async for chunk in stream:
             delta = chunk.choices[0].delta.content if chunk.choices else None
             if delta:

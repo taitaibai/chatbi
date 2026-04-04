@@ -16,14 +16,15 @@ from typing import Any
 
 from jinja2 import Environment, FileSystemLoader
 
+from config.settings import settings
 from llm.client import LLMClient
 from models import ParsedIntent, QueryResult
 
 _PROMPT_DIR = Path(__file__).resolve().parent.parent / "llm" / "prompts"
 _jinja_env = Environment(loader=FileSystemLoader(str(_PROMPT_DIR)), autoescape=False)
 
-# gpt-4o-mini: lower cost, adequate quality for streaming narrative text
-_INTERPRET_MODEL = "gpt-4o-mini"
+# Use the configured LLM so OpenAI-compatible providers such as MiniMax work
+_INTERPRET_MODEL = settings.llm_model
 _TOP_N = 10  # Maximum rows forwarded to LLM
 
 

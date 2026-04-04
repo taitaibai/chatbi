@@ -86,6 +86,7 @@ export async function* streamChat(
     headers: {
       'Content-Type': 'application/json',
       Accept: 'text/event-stream',
+      'X-User-Id': request.user_id,
     },
     body: JSON.stringify(request),
     signal,
@@ -121,7 +122,8 @@ export async function* streamChat(
         if (line.startsWith('event:')) {
           currentEvent = line.slice(6).trim()
         } else if (line.startsWith('data:')) {
-          currentData = line.slice(5).trim()
+          const nextLine = line.slice(5).trim()
+          currentData = currentData ? `${currentData}\n${nextLine}` : nextLine
         } else if (line === '' && currentData) {
           // 空行表示一个 SSE 事件结束
           yield { event: (currentEvent || 'message') as SSEEventType, data: currentData }

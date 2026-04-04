@@ -48,8 +48,17 @@ class SecurityChecker:
                 joins += 1
             if isinstance(node, exp.Table):
                 table_name = node.name
-                if table_name and table_name not in settings.allowed_tables_set:
-                    raise SQLUnsafeError(f"Table not allowed: {table_name}")
+                db_name = node.db
+                full_name = f"{db_name}.{table_name}" if db_name else table_name
+                allowed_tables = settings.allowed_tables_set
+                if db_name:
+                    is_allowed = full_name in allowed_tables
+                else:
+                    is_allowed = table_name in allowed_tables or any(
+                        allowed.endswith(f".{table_name}") for allowed in allowed_tables
+                    )
+                if table_name and not is_allowed:
+                    raise SQLUnsafeError(f"Table not allowed: {full_name}")
 
         if joins > self.MAX_JOIN_COUNT:
             raise SQLUnsafeError("Too many joins")

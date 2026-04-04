@@ -2,6 +2,9 @@ from __future__ import annotations
 
 import time
 
+import sqlglot
+from sqlglot import exp
+
 from adapters.base import DataSourceAdapter
 from models import ComplexityEstimate, QueryColumn, QueryResult
 
@@ -102,13 +105,20 @@ class MockAdapter(DataSourceAdapter):
         return self._datasets[self._infer_domain(sql)]
 
     def _infer_domain(self, sql: str) -> str:
-        lowered = sql.lower()
-        if "refund" in lowered or "fact_orders" in lowered or "gmv" in lowered:
+        tables = self._extract_tables(sql)
+        if {"fact_orders", "fact_refunds"} & tables:
             return "sales"
-        if "user" in lowered or "dau" in lowered:
+        if {"fact_user_daily", "dim_users"} & tables:
             return "user"
-        if "product" in lowered or "stock" in lowered or "sales_volume" in lowered:
+        if {"fact_product_sales", "dim_products"} & tables:
             return "product"
-        if "traffic" in lowered or "uv" in lowered or "pv" in lowered:
+        if {"fact_channel_traffic", "fact_page_views"} & tables:
             return "traffic"
         return "default"
+
+    def _extract_tables(self, sql: str) -> set[str]:
+        try:
+            tree = sqlglot.parse_one(sql)
+        except sqlglot.errors.ParseError:
+            return set()
+        return {node.name for node in tree.walk() if isinstance(node, exp.Table) and node.name}

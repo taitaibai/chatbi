@@ -5,9 +5,11 @@ from collections.abc import AsyncGenerator
 from datetime import date, timedelta
 from typing import Any
 
+import structlog
 from fastapi import APIRouter
 from fastapi.responses import StreamingResponse
 
+from llm.client import LLMClientError
 from models import ChatRequest, ParsedIntent, TimeRange
 from services.pipeline import (
     AdapterError,
@@ -19,9 +21,20 @@ from services.security import SQLUnsafeError
 from services.semantic import SemanticNotFoundError
 
 router = APIRouter(prefix="/api/v1", tags=["chat"])
+logger = structlog.get_logger(__name__)
 
 
-@router.post("/chat")
+@router.post(
+    "/chat",
+    summary="自然语言查询（SSE 流式）",
+    description=(
+        "接受用户自然语言问题，经 NLU→语义映射→SQL生成→执行→可视化→解读完整链路处理，"
+        "以 Server-Sent Events 格式逐步推送各阶段结果。\n\n"
+        "事件类型：`intent_summary` / `sql` / `table_data` / `chart_spec` / `interpretation` / `done` / `error`"
+    ),
+    response_description="text/event-stream 格式的 SSE 流，每个事件含 `event:` 和 `data:` 行",
+    tags=["chat"],
+)
 async def chat(request: ChatRequest) -> StreamingResponse:
     return StreamingResponse(
         _stream_chat(request),
@@ -88,7 +101,28 @@ async def _stream_chat(request: ChatRequest) -> AsyncGenerator[str, None]:
         )
         yield _sse_event("done", {"request_id": None})
         return
+    except LLMClientError:
+        logger.warning(
+            "chat_stream_llm_unavailable",
+            session_id=request.session_id,
+            user_id=request.user_id,
+        )
+        yield _sse_event(
+            "error",
+            {
+                "code": "llm_unavailable",
+                "message": "AI 分析服务暂时不可用，请稍后重试或联系管理员检查 API Key 配置。",
+            },
+        )
+        yield _sse_event("done", {"request_id": None})
+        return
     except Exception:
+        logger.error(
+            "chat_stream_unexpected_error",
+            session_id=request.session_id,
+            user_id=request.user_id,
+            exc_info=True,
+        )
         yield _sse_event(
             "error",
             {"code": "unexpected_error", "message": "Internal server error"},

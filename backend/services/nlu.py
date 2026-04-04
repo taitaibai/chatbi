@@ -9,6 +9,7 @@ import structlog
 from jinja2 import Environment, FileSystemLoader
 
 from config.loader import get_semantic_model
+from config.settings import settings
 from llm.client import LLMClient, LLMClientError
 from models import FilterCondition, ParsedIntent, SemanticModel, SessionContext, TimeRange, TokenUsage
 
@@ -17,8 +18,8 @@ logger = structlog.get_logger(__name__)
 _PROMPT_DIR = Path(__file__).resolve().parent.parent / "llm" / "prompts"
 _jinja_env = Environment(loader=FileSystemLoader(str(_PROMPT_DIR)), autoescape=False)
 
-# Model for intent parsing (cost-efficient)
-_NLU_MODEL = "gpt-4o-mini"
+# Model for intent parsing
+_NLU_MODEL = settings.llm_model
 
 # Keywords that indicate a follow-up question inheriting previous context
 _FOLLOWUP_RE = re.compile(
@@ -33,7 +34,7 @@ class NLUService:
     async def parse(self, query: str, ctx: SessionContext) -> ParsedIntent:
         """Parse natural language query into structured ParsedIntent.
 
-        Calls LLM (gpt-4o-mini) with a Jinja2-rendered prompt. Retries up to
+        Calls the configured LLM with a Jinja2-rendered prompt. Retries up to
         2 times on JSON parse failure; returns clarification_needed=True if all
         attempts are exhausted.
         """

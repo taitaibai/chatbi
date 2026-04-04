@@ -28,6 +28,12 @@ class SecurityCheckerTestCase(unittest.TestCase):
             )
         )
 
+    def test_rejects_schema_prefixed_table_outside_whitelist(self) -> None:
+        with self.assertRaises(SQLUnsafeError):
+            security_checker.validate(
+                "SELECT channel, SUM(amount) AS gmv FROM hidden_schema.fact_orders GROUP BY channel"
+            )
+
 
 if __name__ == "__main__":
     unittest.main()

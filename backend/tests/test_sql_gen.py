@@ -11,6 +11,7 @@ if str(BACKEND_ROOT) not in sys.path:
     sys.path.insert(0, str(BACKEND_ROOT))
 
 from models import FieldRef, JoinClause, ResolvedQuery, TableRef
+from config.settings import settings
 from services.sql_gen import SQLGenService
 
 
@@ -36,15 +37,18 @@ def _resolved_query() -> ResolvedQuery:
 
 class SQLGenServiceTestCase(unittest.IsolatedAsyncioTestCase):
     async def test_generate_cleans_fenced_sql(self) -> None:
+        from models.schemas import TokenUsage
+
         mock_client = MagicMock()
         mock_client.is_configured = True
-        mock_client.chat = AsyncMock(
+        mock_client.chat_with_usage = AsyncMock(
             return_value=(
                 "```sql\n"
                 "SELECT channel, SUM(amount) AS gmv\n"
                 "FROM fact_orders\n"
                 "GROUP BY channel;\n"
-                "```"
+                "```",
+                TokenUsage(),
             )
         )
         service = SQLGenService(llm_client=mock_client)
@@ -55,9 +59,9 @@ class SQLGenServiceTestCase(unittest.IsolatedAsyncioTestCase):
             sql,
             "SELECT channel, SUM(amount) AS gmv\nFROM fact_orders\nGROUP BY channel",
         )
-        mock_client.chat.assert_awaited_once()
-        _, kwargs = mock_client.chat.await_args
-        self.assertEqual(kwargs["model"], "gpt-4o")
+        mock_client.chat_with_usage.assert_awaited_once()
+        _, kwargs = mock_client.chat_with_usage.await_args
+        self.assertEqual(kwargs["model"], settings.llm_model)
         self.assertEqual(kwargs["temperature"], 0.0)
 
     async def test_generate_falls_back_to_compiled_sql_when_llm_not_configured(self) -> None:
