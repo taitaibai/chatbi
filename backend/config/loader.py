@@ -6,6 +6,7 @@ from threading import RLock
 import yaml
 from pydantic import ValidationError
 
+from config.paths import resolve_app_path
 from config.settings import settings
 from models import SemanticModel
 
@@ -23,11 +24,7 @@ class SemanticConfigLoader:
         self._version = 0
 
     def _resolve_path(self, config_path: str | Path) -> Path:
-        path = Path(config_path)
-        if path.is_absolute():
-            return path
-        project_root = Path(__file__).resolve().parents[2]
-        return project_root / path
+        return resolve_app_path(config_path)
 
     @property
     def path(self) -> Path:

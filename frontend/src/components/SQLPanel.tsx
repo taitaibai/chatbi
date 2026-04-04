@@ -1,17 +1,33 @@
-interface SQLPanelProps {
-  sql: string
-}
+import { useState } from 'react'
 
-export function SQLPanel({ sql }: SQLPanelProps) {
+interface Props { sql: string }
+
+export function SQLPanel({ sql }: Props) {
+  const [open, setOpen] = useState(false)
+  const preview = sql.split('\n')[0].slice(0, 60) + (sql.length > 60 ? ' …' : '')
+
   return (
-    <section className="biz-card sql-panel">
-      <header className="biz-card-header">
-        <div>
-          <p className="biz-card-eyebrow">Generated SQL</p>
-          <h3>SQL 面板</h3>
+    <div className="card">
+      <div
+        className="card-header card-header--clickable"
+        onClick={() => setOpen((v) => !v)}
+        role="button"
+        aria-expanded={open}
+      >
+        <div className="card-header-left">
+          <span className="card-eyebrow">SQL</span>
+          <span className="card-summary" style={{ fontFamily: 'monospace', fontSize: '12px' }}>
+            {open ? '收起' : preview}
+          </span>
         </div>
-      </header>
-      <pre className="message-code">{sql}</pre>
-    </section>
+        <span className={`card-chevron${open ? ' card-chevron--open' : ''}`}>▾</span>
+      </div>
+
+      {open && (
+        <div className="card-body">
+          <pre className="sql-pre">{sql}</pre>
+        </div>
+      )}
+    </div>
   )
 }

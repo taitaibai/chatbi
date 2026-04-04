@@ -12,25 +12,32 @@ import { IntentSummaryCard } from './IntentSummaryCard'
 import { ResultTable } from './ResultTable'
 import { SQLPanel } from './SQLPanel'
 
-function isIntentSummary(payload: MessageContent['payload']): payload is IntentSummary {
-  return typeof payload === 'object' && payload !== null && 'metrics' in payload
+function isIntentSummary(p: MessageContent['payload']): p is IntentSummary {
+  return typeof p === 'object' && p !== null && 'metrics' in p
 }
-
-function isQueryData(payload: MessageContent['payload']): payload is QueryData {
-  return typeof payload === 'object' && payload !== null && 'columns' in payload && 'rows' in payload
+function isQueryData(p: MessageContent['payload']): p is QueryData {
+  return typeof p === 'object' && p !== null && 'columns' in p && 'rows' in p
 }
-
-function isChartSpec(payload: MessageContent['payload']): payload is ChartSpec {
-  return typeof payload === 'object' && payload !== null && 'type' in payload && 'echarts_option' in payload
+function isChartSpec(p: MessageContent['payload']): p is ChartSpec {
+  return typeof p === 'object' && p !== null && 'type' in p && 'echarts_option' in p
 }
-
-function isStreamErrorPayload(payload: MessageContent['payload']): payload is StreamErrorPayload {
-  return typeof payload === 'object' && payload !== null && 'message' in payload
+function isStreamError(p: MessageContent['payload']): p is StreamErrorPayload {
+  return typeof p === 'object' && p !== null && 'message' in p
 }
 
 function renderContent(content: MessageContent, index: number) {
   if (content.type === 'loading') {
-    return <div key={index} className="message-loading">正在准备分析链路...</div>
+    return (
+      <div key={index} className="loading-dots">
+        <span className="loading-dot" />
+        <span className="loading-dot" />
+        <span className="loading-dot" />
+      </div>
+    )
+  }
+
+  if (content.type === 'text' && typeof content.payload === 'string') {
+    return <p key={index} className="welcome-text">{content.payload}</p>
   }
 
   if (content.type === 'intent_summary' && isIntentSummary(content.payload)) {
@@ -46,84 +53,68 @@ function renderContent(content: MessageContent, index: number) {
   }
 
   if (content.type === 'chart_spec' && isChartSpec(content.payload)) {
-    return (
-      <section key={index} className="biz-card message-chart">
-        <header className="biz-card-header">
-          <div>
-            <p className="biz-card-eyebrow">Visualization</p>
-            <h3>图表展示</h3>
-          </div>
-        </header>
-        <ChartRenderer spec={content.payload} />
-      </section>
-    )
-  }
-
-  if (content.type === 'error' && typeof content.payload === 'string') {
-    return (
-      <div key={index} className="message-error">
-        {content.payload}
-      </div>
-    )
-  }
-
-  if (content.type === 'error' && isStreamErrorPayload(content.payload)) {
-    if (content.payload.code === 'clarification_needed' || content.payload.code === 'semantic_not_found') {
-      return <ClarificationCard key={index} payload={content.payload} />
-    }
-
-    return (
-      <div key={index} className="message-error">
-        {content.payload.message}
-      </div>
-    )
+    return <ChartRenderer key={index} spec={content.payload} />
   }
 
   if (content.type === 'interpretation' && typeof content.payload === 'string') {
-    return (
-      <div key={index} className="message-interpretation">
-        {content.payload}
-      </div>
-    )
+    return <p key={index} className="interp-text">{content.payload}</p>
   }
 
-  if (typeof content.payload === 'string') {
-    return <div key={index}>{content.payload}</div>
+  if (content.type === 'error') {
+    if (isStreamError(content.payload)) {
+      const payload = content.payload
+      if (payload.code === 'clarification_needed' || payload.code === 'semantic_not_found') {
+        return <ClarificationCard key={index} payload={payload} />
+      }
+      return (
+        <div key={index} className="error-card">
+          <div className="error-label">分析失败</div>
+          <div className="error-body">{payload.message}</div>
+        </div>
+      )
+    }
+    if (typeof content.payload === 'string') {
+      return (
+        <div key={index} className="error-card">
+          <div className="error-body">{content.payload}</div>
+        </div>
+      )
+    }
   }
 
   return null
 }
 
-interface MessageBubbleProps {
-  message: ChatMessage
-}
+interface Props { message: ChatMessage }
 
-export function MessageBubble({ message }: MessageBubbleProps) {
-  const hasTokenUsage = Boolean(message.meta?.tokenUsage)
+export function MessageBubble({ message }: Props) {
+  const isUser = message.role === 'user'
+  const time = new Date(message.timestamp).toLocaleTimeString('zh-CN', {
+    hour: '2-digit',
+    minute: '2-digit',
+  })
+
+  if (isUser) {
+    const text = message.content.find((c) => c.type === 'text')?.payload as string | undefined
+    return (
+      <div className="msg msg--user">
+        <div className="msg-user-bubble">{text}</div>
+        <span className="msg-label">{time}</span>
+      </div>
+    )
+  }
 
   return (
-    <article className={`message-bubble message-bubble-${message.role}`}>
-      <header className="message-meta">
-        <span>{message.role === 'user' ? '业务方' : 'ChatBI'}</span>
-        <time>{new Date(message.timestamp).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })}</time>
-      </header>
-      <div className="message-body">
-        {message.content.map((content, index) => renderContent(content, index))}
+    <div className="msg msg--assistant">
+      <span className="msg-label">ChatBI</span>
+      <div className="msg-assistant-body">
+        {message.content.map((c, i) => renderContent(c, i))}
       </div>
-      {message.role === 'assistant' && (message.status || message.meta) ? (
-        <footer className="message-footer">
-          <span className={`message-status message-status-${message.status ?? 'streaming'}`}>
-            {message.status === 'done' ? '已完成' : message.status === 'error' ? '已中断' : '流式处理中'}
-          </span>
-          {typeof message.meta?.latencyMs === 'number' ? <span>{message.meta.latencyMs} ms</span> : null}
-          {hasTokenUsage ? (
-            <span>
-              Tokens {message.meta?.tokenUsage?.prompt}/{message.meta?.tokenUsage?.completion}
-            </span>
-          ) : null}
-          {message.meta?.requestId ? <span>ID {message.meta.requestId}</span> : null}
-        </footer>
+      {message.status === 'done' && message.meta?.latencyMs ? (
+        <div className="msg-footer">
+          <span>{message.meta.latencyMs} ms</span>
+        </div>
       ) : null}
-    </article>
+    </div>
   )
 }

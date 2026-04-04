@@ -1,34 +1,26 @@
 import type { StreamErrorPayload } from '../types'
 
-interface ClarificationCardProps {
-  payload: StreamErrorPayload
-}
+interface Props { payload: StreamErrorPayload }
 
-export function ClarificationCard({ payload }: ClarificationCardProps) {
+export function ClarificationCard({ payload }: Props) {
   return (
-    <section className="biz-card clarification-card">
-      <header className="biz-card-header">
-        <div>
-          <p className="biz-card-eyebrow">Clarification</p>
-          <h3>需要补充信息</h3>
-        </div>
-      </header>
+    <div className="clari-card">
+      <div className="clari-label">需要补充信息</div>
+      <p className="clari-text">{payload.message}</p>
 
-      <p className="clarification-message">{payload.message}</p>
+      {payload.suggestion && (
+        <p className="clari-text" style={{ marginTop: 6, opacity: 0.8 }}>
+          {payload.suggestion}
+        </p>
+      )}
 
-      {payload.suggestion ? (
-        <p className="clarification-suggestion">建议：{payload.suggestion}</p>
-      ) : null}
-
-      {payload.available_metrics && payload.available_metrics.length > 0 ? (
-        <div className="intent-chip-list">
-          {payload.available_metrics.map((metric) => (
-            <span key={metric} className="intent-chip intent-chip-accent">
-              {metric}
-            </span>
+      {payload.available_metrics && payload.available_metrics.length > 0 && (
+        <div className="clari-chip-row">
+          {payload.available_metrics.map((m) => (
+            <span key={m} className="clari-chip">{m}</span>
           ))}
         </div>
-      ) : null}
-    </section>
+      )}
+    </div>
   )
 }

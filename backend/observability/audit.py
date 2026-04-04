@@ -8,6 +8,7 @@ from pathlib import Path
 import aiosqlite
 import structlog
 
+from config.paths import resolve_app_path
 from config.settings import settings
 from models import RequestTrace
 
@@ -70,12 +71,7 @@ class AuditLogger:
     _LONG_NUMBER_RE = re.compile(r"\b\d{11,}\b")
 
     def __init__(self, db_path: str | None = None) -> None:
-        configured_path = Path(db_path or settings.audit_db_path)
-        if configured_path.is_absolute():
-            self._db_path = configured_path
-        else:
-            project_root = Path(__file__).resolve().parents[2]
-            self._db_path = project_root / configured_path
+        self._db_path = resolve_app_path(db_path or settings.audit_db_path)
 
         self._db: aiosqlite.Connection | None = None
         self._queue: asyncio.Queue[RequestTrace | None] = asyncio.Queue()

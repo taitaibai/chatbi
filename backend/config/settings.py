@@ -3,7 +3,9 @@ from pathlib import Path
 from pydantic import AliasChoices, Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-_ROOT_ENV_FILE = Path(__file__).resolve().parents[2] / ".env"
+from config.paths import find_env_file
+
+_ROOT_ENV_FILE = find_env_file()
 
 
 class Settings(BaseSettings):
@@ -14,16 +16,16 @@ class Settings(BaseSettings):
         extra="ignore",
     )
 
-    # LLM 配置
-    openai_api_key: str = Field(
+    # LLM 配置（兼容任何 OpenAI SDK 兼容的服务：OpenAI / MiniMax / DeepSeek / 本地 Ollama 等）
+    llm_api_key: str = Field(
         default="",
-        validation_alias=AliasChoices("OPENAI_API_KEY", "MINIMAX_API_KEY", "LLM_API_KEY"),
-        description="LLM API Key（兼容 OpenAI SDK，如 MiniMax）",
+        validation_alias=AliasChoices("LLM_API_KEY", "OPENAI_API_KEY"),
+        description="LLM API Key",
     )
-    llm_model: str = Field(default="MiniMax-M2.5", description="默认 LLM 模型")
+    llm_model: str = Field(default="gpt-4o-mini", description="LLM 模型名称")
     llm_base_url: str = Field(
-        default="https://api.minimaxi.com/v1",
-        description="LLM 接口基础 URL（兼容 OpenAI SDK，如 MiniMax）",
+        default="",
+        description="LLM 接口基础 URL，留空则使用 OpenAI 默认端点",
     )
     llm_timeout_seconds: int = Field(default=60, description="LLM 请求超时时间（秒）")
 
@@ -32,11 +34,11 @@ class Settings(BaseSettings):
         default="mock", description="数据源类型：mock / clickhouse / mysql"
     )
     semantic_model_path: str = Field(
-        default="backend/config/semantic_model.yaml",
+        default="config/semantic_model.yaml",
         description="语义模型 YAML 路径",
     )
     audit_db_path: str = Field(
-        default="backend/data/audit.db", description="审计日志 SQLite 路径"
+        default="data/audit.db", description="审计日志 SQLite 路径"
     )
     allowed_origins: list[str] = Field(
         default_factory=lambda: ["http://localhost:5173", "http://127.0.0.1:5173"],

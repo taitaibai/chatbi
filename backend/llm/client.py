@@ -1,10 +1,14 @@
 from __future__ import annotations
 
 import asyncio
+import re
 from collections.abc import AsyncGenerator, Sequence
 from typing import Any
 
 from models.schemas import TokenUsage
+
+# Strip chain-of-thought blocks emitted by reasoning models (e.g. MiniMax-M2.7, DeepSeek-R1)
+_THINK_RE = re.compile(r"<think>.*?</think>", re.DOTALL)
 
 from openai import (
     APIConnectionError,
@@ -30,8 +34,9 @@ class LLMClient:
         default_model: str | None = None,
         max_concurrent: int | None = None,
     ) -> None:
-        self._api_key = api_key or settings.openai_api_key
-        self._base_url = base_url or settings.llm_base_url
+        self._api_key = api_key or settings.llm_api_key
+        # 空字符串视为未配置，交给 SDK 使用默认端点（OpenAI）
+        self._base_url = base_url or settings.llm_base_url or None
         self._default_model = default_model or settings.llm_model
         self._client: AsyncOpenAI | None = None
         _limit = max_concurrent if max_concurrent is not None else settings.llm_max_concurrent
@@ -43,7 +48,7 @@ class LLMClient:
 
     def _get_client(self) -> AsyncOpenAI:
         if not self._api_key:
-            raise LLMClientError("OpenAI API key is not configured")
+            raise LLMClientError("LLM API key is not configured")
         if self._client is None:
             self._client = AsyncOpenAI(
                 api_key=self._api_key,
@@ -77,7 +82,7 @@ class LLMClient:
         content = response.choices[0].message.content
         if not content:
             raise LLMClientError("Empty response returned from LLM")
-        return content
+        return _strip_think(content)
 
     @retry(
         wait=wait_exponential(multiplier=0.5, min=0.5, max=4),
@@ -105,6 +110,7 @@ class LLMClient:
         content = response.choices[0].message.content
         if not content:
             raise LLMClientError("Empty response returned from LLM")
+        content = _strip_think(content)
         usage = TokenUsage(
             prompt_tokens=response.usage.prompt_tokens if response.usage else 0,
             completion_tokens=response.usage.completion_tokens if response.usage else 0,
@@ -154,3 +160,8 @@ class LLMClient:
             stream=True,
             **kwargs,
         )
+
+
+def _strip_think(content: str) -> str:
+    """Remove <think>...</think> blocks emitted by reasoning models before returning content."""
+    return _THINK_RE.sub("", content).strip()
